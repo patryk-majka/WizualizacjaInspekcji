@@ -44,7 +44,7 @@ def get_latest_any_and_bad(limit_bad=5):
                     "filename": img.name,
                     "category": subdir.name,
                     "timestamp": mtime,
-                    "url": f"/static/img/new_images/{subdir.name}/{img.name}",
+                    "url": f"/static/imgy/new_images/{subdir.name}/{img.name}",
                 }
 
                 if (latest_any is None) or (mtime > latest_any["timestamp"]):
