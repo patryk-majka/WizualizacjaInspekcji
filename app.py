@@ -4,7 +4,7 @@ from collections import deque
 
 app = Flask(__name__)
 
-BASE_DIR = Path("/ftp/ftp/X1/new_images")
+BASE_DIR = Path("/ftp/ftp/Y1/new_images")
 ALLOWED_EXTS = {".jpg", ".jpeg", ".png"}
 
 # FIFO na ostatnie 5 złych zdjęć (nie "good")
