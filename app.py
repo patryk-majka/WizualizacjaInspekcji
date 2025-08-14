@@ -3,42 +3,56 @@ import os
 
 app = Flask(__name__)
 
-# Ścieżka bazowa do katalogów kamer
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Konfiguracja katalogów kamer
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+CAMERAS = {
+    "X1": os.path.join(BASE_DIR, "X1"),
+    "Y1": os.path.join(BASE_DIR, "Y1"),
+}
 
-@app.route('/kamera/<camera_id>')
-def kamera(camera_id):
-    # Sprawdzamy czy kamera jest X1 lub Y1
-    if camera_id not in ['X1', 'Y1']:
+@app.route("/")
+def home():
+    # Domyślnie przechodzimy do kamery X1
+    return render_template("home.html", cameras=CAMERAS.keys())
+
+@app.route("/kamera/<camera_id>")
+def kamera_view(camera_id):
+    if camera_id not in CAMERAS:
+        abort(404, f"Kamera {camera_id} nie istnieje.")
+
+    camera_path = CAMERAS[camera_id]
+    good_dir = os.path.join(camera_path, "good")
+    bad_dir = os.path.join(camera_path, "bad")
+
+    # Pobierz listę zdjęć
+    good_images = sorted(os.listdir(good_dir)) if os.path.exists(good_dir) else []
+    bad_images = sorted(os.listdir(bad_dir)) if os.path.exists(bad_dir) else []
+
+    # Identyfikacja zdjęć złych z kategoriami (nazwa katalogu)
+    bad_images_info = []
+    for fname in bad_images:
+        bad_images_info.append({
+            "filename": fname,
+            "category": "bad"
+        })
+
+    # Link do przełączenia kamery
+    other_camera = [c for c in CAMERAS if c != camera_id][0]
+
+    return render_template(
+        "kamera.html",
+        camera_id=camera_id,
+        other_camera=other_camera,
+        good_images=good_images,
+        bad_images_info=bad_images_info
+    )
+
+@app.route("/images/<camera_id>/<category>/<filename>")
+def serve_image(camera_id, category, filename):
+    if camera_id not in CAMERAS:
         abort(404)
+    img_dir = os.path.join(CAMERAS[camera_id], category)
+    return send_from_directory(img_dir, filename)
 
-    camera_path = os.path.join(BASE_DIR, camera_id)
-
-    # Lista klas (podkatalogów)
-    try:
-        classes = sorted([d for d in os.listdir(camera_path) if os.path.isdir(os.path.join(camera_path, d))])
-    except FileNotFoundError:
-        abort(404)
-
-    # Zbieramy zdjęcia z podkatalogów
-    images = {}
-    for cls in classes:
-        cls_path = os.path.join(camera_path, cls)
-        imgs = sorted([f for f in os.listdir(cls_path) if f.lower().endswith(('.jpg', '.png', '.jpeg'))])
-        images[cls] = imgs
-
-    # Link do drugiej kamery
-    other_camera = 'Y1' if camera_id == 'X1' else 'X1'
-
-    return render_template('index.html', camera_id=camera_id, other_camera=other_camera, images=images)
-
-@app.route('/img/<camera_id>/<cls>/<filename>')
-def serve_image(camera_id, cls, filename):
-    # Bezpieczeństwo: nie pozwalamy na wyjście poza katalog
-    if camera_id not in ['X1', 'Y1']:
-        abort(404)
-    directory = os.path.join(BASE_DIR, camera_id, cls)
-    return send_from_directory(directory, filename)
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=5000)
