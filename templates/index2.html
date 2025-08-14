@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Ostatnie zdjęcie</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 2rem; background: #f6f6f6; }
+        #latest-img { max-height: 70vh; max-width: 95vw; border: 2px solid #ccc; border-radius: 8px; background: #fff; }
+        #label { margin-top: 1rem; font-size: 1.25rem; font-weight: bold; color: #333; }
+        #status { margin-top: .5rem; font-size: .9rem; color: #666; }
+    </style>
+</head>
+<body>
+    <h1>Ostatnie zdjęcie</h1>
+    <div>
+        <img id="latest-img" src="" alt="Brak zdjęcia">
+        <div id="label">—</div>
+        <div id="status"></div>
+    </div>
+
+    <script>
+        let lastTimestamp = 0;
+        const imgEl = document.getElementById("latest-img");
+        const labelEl = document.getElementById("label");
+        const statusEl = document.getElementById("status");
+
+        async function updateImage() {
+            try {
+                const res = await fetch("/api/latest", { cache: "no-store" });
+                const data = await res.json();
+
+                if (!data) {
+                    labelEl.textContent = "Brak zdjęć";
+                    statusEl.textContent = "";
+                    return;
+                }
+
+                // Przeładuj tylko, jeśli jest nowsze zdjęcie
+                if (data.timestamp > lastTimestamp) {
+                    lastTimestamp = data.timestamp;
+                    // cache-busting oparty na timestampie pliku
+                    imgEl.src = data.url + "?t=" + data.timestamp;
+                    labelEl.textContent = "Kategoria: " + data.category;
+                    statusEl.textContent = "Plik: " + data.filename;
+                }
+            } catch (e) {
+                console.error("Błąd pobierania /api/latest:", e);
+            }
+        }
+
+        // stabilne odpytywanie co 1s (możesz zmienić np. na 500 ms)
+        setInterval(updateImage, 1000);
+        updateImage();
+    </script>
+</body>
+</html>
