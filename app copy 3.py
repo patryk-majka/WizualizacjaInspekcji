@@ -4,32 +4,29 @@ from collections import deque
 
 app = Flask(__name__)
 
-BASE_ROOT = Path("/ftp/ftp")
+BASE_DIR = Path("/ftp/ftp/X1/new_images")
 ALLOWED_EXTS = {".jpg", ".jpeg", ".png"}
 
-# Pamięć FIFO i ostatnie timestampy osobno dla każdej kamery
-camera_state = {
-    "X1": {"fifo": deque(maxlen=5), "last_bad_timestamp": 0},
-    "Y1": {"fifo": deque(maxlen=5), "last_bad_timestamp": 0},
-}
+# FIFO na ostatnie 5 złych zdjęć (nie "good")
+bad_images_fifo = deque(maxlen=5)
+last_bad_timestamp = 0  # timestamp najnowszego złego zdjęcia już znanego (dla wykrywania nowości)
 
 
-def get_latest_any_and_bad(camera: str, limit_bad=5):
+def get_latest_any_and_bad(limit_bad=5):
     """
     Zwraca:
       - latest_any: dict z najnowszym zdjęciem (dowolna kategoria)
       - latest_bad: dict z najnowszym złym zdjęciem (katalog inny niż 'good')
-      - top_bad:   lista dictów z ostatnimi 'limit_bad' złymi zdjęciami
+      - top_bad:   lista dictów z ostatnimi 'limit_bad' złymi zdjęciami (posortowane malejąco po czasie)
     """
-    base_dir = BASE_ROOT / camera / "new_images"
     latest_any = None
     latest_bad = None
     bad_list = []
 
-    if not base_dir.exists():
+    if not BASE_DIR.exists():
         return None, None, []
 
-    for subdir in base_dir.iterdir():
+    for subdir in BASE_DIR.iterdir():
         if not subdir.is_dir():
             continue
         try:
@@ -47,7 +44,7 @@ def get_latest_any_and_bad(camera: str, limit_bad=5):
                     "filename": img.name,
                     "category": subdir.name,
                     "timestamp": mtime,
-                    "url": f"/static/img/{camera}/new_images/{subdir.name}/{img.name}",
+                    "url": f"/static/img/new_images/{subdir.name}/{img.name}",
                 }
 
                 if (latest_any is None) or (mtime > latest_any["timestamp"]):
@@ -60,47 +57,39 @@ def get_latest_any_and_bad(camera: str, limit_bad=5):
         except PermissionError:
             continue
 
-    # posortuj złe malejąco po czasie
+    # posortuj złe malejąco po czasie i weź limit
     bad_list.sort(key=lambda d: d["timestamp"], reverse=True)
     top_bad = bad_list[:limit_bad]
     return latest_any, latest_bad, top_bad
 
 
 @app.route("/")
-def home_redirect():
-    # domyślnie X1
-    return render_template("index.html", camera="X1")
+def index():
+    return render_template("index.html")
 
 
-@app.route("/<camera>")
-def index(camera):
-    if camera not in camera_state:
-        return f"Nieznana kamera: {camera}", 404
-    return render_template("index.html", camera=camera)
+@app.route("/api/latest")
+def api_latest():
+    global last_bad_timestamp, bad_images_fifo
 
+    latest_any, latest_bad, top_bad = get_latest_any_and_bad(limit_bad=5)
 
-@app.route("/api/latest/<camera>")
-def api_latest(camera):
-    if camera not in camera_state:
-        return jsonify({"error": "Nieznana kamera"}), 404
+    # Inicjalizacja FIFO przy pierwszym razie – pokaż od razu 5 ostatnich złych
+    if not bad_images_fifo and top_bad:
+        for item in top_bad:
+            bad_images_fifo.append(item)  # kolejność będzie od najstarszego do najnowszego w deque
+        # ustaw najnowszy timestamp
+        last_bad_timestamp = top_bad[0]["timestamp"]
 
-    latest_any, latest_bad, top_bad = get_latest_any_and_bad(camera, limit_bad=5)
-    state = camera_state[camera]
+    # Jeśli pojawiło się nowsze złe zdjęcie – dodaj na początek (FIFO)
+    if latest_bad and latest_bad["timestamp"] > last_bad_timestamp:
+        last_bad_timestamp = latest_bad["timestamp"]
+        bad_images_fifo.appendleft(latest_bad)
 
-    # Inicjalizacja FIFO przy pierwszym razie
-    if not state["fifo"] and top_bad:
-        for item in reversed(top_bad):
-            state["fifo"].append(item)
-        state["last_bad_timestamp"] = top_bad[0]["timestamp"]
-
-    # Jeśli pojawiło się nowsze złe zdjęcie
-    if latest_bad and latest_bad["timestamp"] > state["last_bad_timestamp"]:
-        state["last_bad_timestamp"] = latest_bad["timestamp"]
-        state["fifo"].appendleft(latest_bad)
-
+    # Zwróć odpowiedź
     return jsonify({
         "latest": latest_any,
-        "bad_recent": list(state["fifo"])
+        "bad_recent": list(bad_images_fifo)
     })
 
 

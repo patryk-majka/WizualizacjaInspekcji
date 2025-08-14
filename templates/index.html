@@ -2,7 +2,7 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <title>Ostatnie zdjęcie</title>
+    <title>Ostatnie zdjęcie – {{ camera }}</title>
     <style>
         body { font-family: Arial, sans-serif; text-align: center; padding: 2rem; background: #f6f6f6; }
         #latest-img { max-height: 70vh; max-width: 95vw; border: 2px solid #ccc; border-radius: 8px; background: #fff; }
@@ -15,10 +15,29 @@
         .thumb-meta { margin-top: 6px; font-size: 0.9rem; color: #333; word-break: break-all; }
         .thumb-meta .cat { font-weight: 700; }
         .thumb-meta .name { font-size: 0.85rem; color: #555; margin-top: 2px; }
+
+        .cam-switch { margin-bottom: 1rem; }
+        .cam-switch a {
+            margin: 0 8px;
+            padding: 6px 12px;
+            background: #eee;
+            border-radius: 4px;
+            text-decoration: none;
+            color: #333;
+        }
+        .cam-switch a.active {
+            background: #333;
+            color: #fff;
+        }
     </style>
 </head>
 <body>
-    <h1>Ostatnie zdjęcie</h1>
+    <div class="cam-switch">
+        <a href="/X1" class="{{ 'active' if camera == 'X1' else '' }}">Kamera X1</a>
+        <a href="/Y1" class="{{ 'active' if camera == 'Y1' else '' }}">Kamera Y1</a>
+    </div>
+
+    <h1>Ostatnie zdjęcie – {{ camera }}</h1>
     <div>
         <img id="latest-img" src="" alt="Brak zdjęcia">
         <div id="label">—</div>
@@ -29,76 +48,8 @@
     <div class="thumbs" id="bad-thumbs"></div>
 
     <script>
-        let lastMainTs = 0;           // timestamp ostatniego głównego zdjęcia
-        let lastBadNewestTs = 0;      // timestamp najnowszego złego (bad_recent[0])
+        const camera = "{{ camera }}"; // aktualnie wybrana kamera
+        let lastMainTs = 0;
+        let lastBadNewestTs = 0;
 
-        const imgEl = document.getElementById("latest-img");
-        const labelEl = document.getElementById("label");
-        const statusEl = document.getElementById("status");
-        const badThumbsEl = document.getElementById("bad-thumbs");
-
-        function renderBadThumbs(list) {
-            badThumbsEl.innerHTML = "";
-            list.forEach(item => {
-                const box = document.createElement("div");
-                box.className = "thumb";
-
-                const img = document.createElement("img");
-                img.src = item.url + "?t=" + item.timestamp;
-                img.alt = item.filename;
-                img.title = item.category + " — " + item.filename;
-
-                const meta = document.createElement("div");
-                meta.className = "thumb-meta";
-
-                const cat = document.createElement("div");
-                cat.className = "cat";
-                cat.textContent = "Kategoria: " + item.category;
-
-                const name = document.createElement("div");
-                name.className = "name";
-                name.textContent = "Plik: " + item.filename;
-
-                meta.appendChild(cat);
-                meta.appendChild(name);
-                box.appendChild(img);
-                box.appendChild(meta);
-                badThumbsEl.appendChild(box);
-            });
-        }
-
-        async function update() {
-            try {
-                const res = await fetch("/api/latest", { cache: "no-store" });
-                const data = await res.json();
-
-                // Główne zdjęcie (dowolna kategoria)
-                if (data.latest && data.latest.timestamp > lastMainTs) {
-                    lastMainTs = data.latest.timestamp;
-                    imgEl.src = data.latest.url + "?t=" + data.latest.timestamp;
-                    labelEl.textContent = "Kategoria: " + data.latest.category;
-                    statusEl.textContent = "Plik: " + data.latest.filename;
-                }
-
-                // Miniatury złych zdjęć (odśwież tylko, gdy najnowsze złe ma większy timestamp)
-                if (Array.isArray(data.bad_recent) && data.bad_recent.length > 0) {
-                    const newestTs = data.bad_recent[0].timestamp;
-                    if (newestTs > lastBadNewestTs) {
-                        lastBadNewestTs = newestTs;
-                        renderBadThumbs(data.bad_recent);
-                    } else if (badThumbsEl.childElementCount === 0) {
-                        // Inicjalne wyrenderowanie, jeśli brak węzłów (np. pierwszy load)
-                        renderBadThumbs(data.bad_recent);
-                        lastBadNewestTs = newestTs;
-                    }
-                }
-            } catch (e) {
-                console.error("Błąd pobierania /api/latest:", e);
-            }
-        }
-
-        setInterval(update, 500); // odświeżanie co 1 s
-        update();
-    </script>
-</body>
-</html>
+        const imgEl = document.getElementById("latest-img
