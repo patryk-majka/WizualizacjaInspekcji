@@ -1,0 +1,59 @@
+from flask import Flask, render_template, jsonify, send_from_directory
+from pathlib import Path
+import os
+
+app = Flask(__name__)
+
+# Główna ścieżka do katalogu ze zdjęciami
+BASE_DIR = Path("/ftp/ftp/X1/new_images")
+IMG_EXT = [".jpg", ".jpeg", ".png"]
+N_BAD = 5  # liczba ostatnich złych zdjęć do pokazania
+
+def get_latest_image():
+    images = []
+    for subdir in BASE_DIR.iterdir():
+        if subdir.is_dir():
+            for img in subdir.glob("*.jpg"):
+                images.append((img, subdir.name, img.stat().st_mtime))
+    if not images:
+        return None
+    latest = max(images, key=lambda x: x[2])
+    return {
+        "filename": latest[0].name,
+        "category": latest[1],
+        "path": f"{latest[1]}/{latest[0].name}"
+    }
+
+def get_bad_images():
+    bad_images = []
+    for subdir in BASE_DIR.iterdir():
+        if subdir.is_dir() and subdir.name.lower() != "good":
+            for img in subdir.glob("*.jpg"):
+                bad_images.append((img, subdir.name, img.stat().st_mtime))
+    bad_images.sort(key=lambda x: x[2], reverse=True)
+    return [{
+        "filename": img.name,
+        "category": category,
+        "path": f"{category}/{img.name}"
+    } for img, category, _ in bad_images[:N_BAD]]
+
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+@app.route("/api/images")
+def images():
+    latest = get_latest_image()
+    bad = get_bad_images()
+    return jsonify({
+        "latest": latest,
+        "bad": bad
+    })
+
+@app.route("/static/bad/<category>/<filename>")
+def static_bad(category, filename):
+    image_dir = BASE_DIR / category
+    return send_from_directory(image_dir, filename)
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)
