@@ -52,4 +52,69 @@
         let lastMainTs = 0;
         let lastBadNewestTs = 0;
 
-        const imgEl = document.getElementById("latest-img
+        const imgEl = document.getElementById("latest-img");
+        const labelEl = document.getElementById("label");
+        const statusEl = document.getElementById("status");
+        const badThumbsEl = document.getElementById("bad-thumbs");
+
+        function renderBadThumbs(list) {
+            badThumbsEl.innerHTML = "";
+            list.forEach(item => {
+                const box = document.createElement("div");
+                box.className = "thumb";
+
+                const img = document.createElement("img");
+                img.src = item.url + "?t=" + item.timestamp;
+                img.alt = item.filename;
+                img.title = item.category + " — " + item.filename;
+
+                const meta = document.createElement("div");
+                meta.className = "thumb-meta";
+
+                const cat = document.createElement("div");
+                cat.className = "cat";
+                cat.textContent = "Kategoria: " + item.category;
+
+                const name = document.createElement("div");
+                name.className = "name";
+                name.textContent = "Plik: " + item.filename;
+
+                meta.appendChild(cat);
+                meta.appendChild(name);
+                box.appendChild(img);
+                box.appendChild(meta);
+                badThumbsEl.appendChild(box);
+            });
+        }
+
+        async function update() {
+            try {
+                const res = await fetch(`/api/latest/${camera}`, { cache: "no-store" });
+                const data = await res.json();
+
+                // Główne zdjęcie
+                if (data.latest && data.latest.timestamp > lastMainTs) {
+                    lastMainTs = data.latest.timestamp;
+                    imgEl.src = data.latest.url + "?t=" + data.latest.timestamp;
+                    labelEl.textContent = "Kategoria: " + data.latest.category;
+                    statusEl.textContent = "Plik: " + data.latest.filename;
+                }
+
+                // Miniatury złych zdjęć
+                if (Array.isArray(data.bad_recent) && data.bad_recent.length > 0) {
+                    const newestTs = data.bad_recent[0].timestamp;
+                    if (newestTs > lastBadNewestTs || badThumbsEl.childElementCount === 0) {
+                        lastBadNewestTs = newestTs;
+                        renderBadThumbs(data.bad_recent);
+                    }
+                }
+            } catch (e) {
+                console.error("Błąd pobierania /api/latest:", e);
+            }
+        }
+
+        setInterval(update, 500);
+        update();
+    </script>
+</body>
+</html>
