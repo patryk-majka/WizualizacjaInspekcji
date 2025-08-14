@@ -4,64 +4,75 @@ from collections import deque
 
 app = Flask(__name__)
 
-# Katalog źródłowy (fizyczny) ze zdjęciami:
 BASE_DIR = Path("/ftp/ftp/X1/new_images")
-
-# Dozwolone rozszerzenia (możesz dopisać kolejne)
 ALLOWED_EXTS = {".jpg", ".jpeg", ".png"}
 
-def get_latest_image():
-    """
-    Skanuje tylko katalogi bezpośrednio pod BASE_DIR (1 poziom),
-    wybiera najnowszy plik o dozwolonym rozszerzeniu.
-    Zwraca dict z filename, category, timestamp i gotowym URL do <img>.
-    """
+# FIFO na ostatnie 5 złych zdjęć
+bad_images_fifo = deque(maxlen=5)
+last_bad_timestamp = 0
+
+
+def scan_latest():
+    """Zwraca tuple: (najnowsze zdjęcie dowolne, najnowsze zdjęcie złe)"""
     if not BASE_DIR.exists():
-        return None
+        return None, None
 
-    latest = None
+    latest_any = None
+    latest_bad = None
 
-    # Iteruj po kategoriach (good, zgrzew, itp.)
     for subdir in BASE_DIR.iterdir():
         if not subdir.is_dir():
             continue
-
-        # Iteruj po plikach w danej kategorii
         try:
             for img in subdir.iterdir():
-                if not img.is_file():
-                    continue
-                if img.suffix.lower() not in ALLOWED_EXTS:
+                if not img.is_file() or img.suffix.lower() not in ALLOWED_EXTS:
                     continue
                 try:
                     mtime = img.stat().st_mtime
                 except FileNotFoundError:
-                    # Plik mógł zostać usunięty w trakcie – pomijamy
                     continue
 
-                if (latest is None) or (mtime > latest["timestamp"]):
-                    latest = {
-                        "filename": img.name,
-                        "category": subdir.name,
-                        "timestamp": mtime,
-                        # UWAGA: korzystamy z domyślnego /static + Twojego symlinka
-                        # static/img/new_images -> /ftp/ftp/X1/new_images
-                        "url": f"/static/img/new_images/{subdir.name}/{img.name}",
-                    }
+                img_info = {
+                    "filename": img.name,
+                    "category": subdir.name,
+                    "timestamp": mtime,
+                    "url": f"/static/img/new_images/{subdir.name}/{img.name}"
+                }
+
+                # najnowsze dowolne
+                if (latest_any is None) or (mtime > latest_any["timestamp"]):
+                    latest_any = img_info
+
+                # najnowsze złe (nie good)
+                if subdir.name.lower() != "good":
+                    if (latest_bad is None) or (mtime > latest_bad["timestamp"]):
+                        latest_bad = img_info
+
         except PermissionError:
-            # Gdyby któryś folder był niedostępny – pomijamy
             continue
 
-    return latest
+    return latest_any, latest_bad
+
 
 @app.route("/")
 def index():
     return render_template("index.html")
 
+
 @app.route("/api/latest")
 def api_latest():
-    return jsonify(get_latest_image())
+    global last_bad_timestamp
+
+    latest_any, latest_bad = scan_latest()
+    if latest_bad and latest_bad["timestamp"] > last_bad_timestamp:
+        last_bad_timestamp = latest_bad["timestamp"]
+        bad_images_fifo.appendleft(latest_bad)
+
+    return jsonify({
+        "latest": latest_any,
+        "bad_recent": list(bad_images_fifo)
+    })
+
 
 if __name__ == "__main__":
-    # port 8000 jak wcześniej, debug dla wygody
     app.run(host="0.0.0.0", port=8000, debug=True)

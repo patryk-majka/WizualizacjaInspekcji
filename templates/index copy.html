@@ -8,8 +8,6 @@
         #latest-img { max-height: 70vh; max-width: 95vw; border: 2px solid #ccc; border-radius: 8px; background: #fff; }
         #label { margin-top: 1rem; font-size: 1.25rem; font-weight: bold; color: #333; }
         #status { margin-top: .5rem; font-size: .9rem; color: #666; }
-        .thumbs { display: flex; justify-content: center; flex-wrap: wrap; margin-top: 2rem; gap: 10px; }
-        .thumbs img { height: 120px; border: 1px solid #ccc; border-radius: 4px; background: #fff; }
     </style>
 </head>
 <body>
@@ -20,53 +18,37 @@
         <div id="status"></div>
     </div>
 
-    <h2>Ostatnie 5 złych zdjęć</h2>
-    <div class="thumbs" id="bad-thumbs"></div>
-
     <script>
         let lastTimestamp = 0;
-        let lastBadCount = 0;
-
         const imgEl = document.getElementById("latest-img");
         const labelEl = document.getElementById("label");
         const statusEl = document.getElementById("status");
-        const badThumbsEl = document.getElementById("bad-thumbs");
 
         async function updateImage() {
             try {
                 const res = await fetch("/api/latest", { cache: "no-store" });
                 const data = await res.json();
 
-                if (!data.latest) {
+                if (!data) {
                     labelEl.textContent = "Brak zdjęć";
                     statusEl.textContent = "";
                     return;
                 }
 
-                // główne zdjęcie
-                if (data.latest.timestamp > lastTimestamp) {
-                    lastTimestamp = data.latest.timestamp;
-                    imgEl.src = data.latest.url + "?t=" + data.latest.timestamp;
-                    labelEl.textContent = "Kategoria: " + data.latest.category;
-                    statusEl.textContent = "Plik: " + data.latest.filename;
-                }
-
-                // miniaturki złych zdjęć
-                if (data.bad_recent && data.bad_recent.length !== lastBadCount) {
-                    lastBadCount = data.bad_recent.length;
-                    badThumbsEl.innerHTML = "";
-                    data.bad_recent.forEach(item => {
-                        const thumb = document.createElement("img");
-                        thumb.src = item.url + "?t=" + item.timestamp;
-                        thumb.title = item.category + " - " + item.filename;
-                        badThumbsEl.appendChild(thumb);
-                    });
+                // Przeładuj tylko, jeśli jest nowsze zdjęcie
+                if (data.timestamp > lastTimestamp) {
+                    lastTimestamp = data.timestamp;
+                    // cache-busting oparty na timestampie pliku
+                    imgEl.src = data.url + "?t=" + data.timestamp;
+                    labelEl.textContent = "Kategoria: " + data.category;
+                    statusEl.textContent = "Plik: " + data.filename;
                 }
             } catch (e) {
                 console.error("Błąd pobierania /api/latest:", e);
             }
         }
 
+        // stabilne odpytywanie co 1s (możesz zmienić np. na 500 ms)
         setInterval(updateImage, 1000);
         updateImage();
     </script>
