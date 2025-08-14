@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Ostatnie zdjęcie</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 2rem; background: #f6f6f6; }
+        #latest-img { max-height: 70vh; max-width: 95vw; border: 2px solid #ccc; border-radius: 8px; background: #fff; }
+        #label { margin-top: 1rem; font-size: 1.25rem; font-weight: bold; color: #333; }
+        #status { margin-top: .5rem; font-size: .9rem; color: #666; }
+        .thumbs { display: flex; justify-content: center; flex-wrap: wrap; margin-top: 2rem; gap: 10px; }
+        .thumbs img { height: 120px; border: 1px solid #ccc; border-radius: 4px; background: #fff; }
+    </style>
+</head>
+<body>
+    <h1>Ostatnie zdjęcie</h1>
+    <div>
+        <img id="latest-img" src="" alt="Brak zdjęcia">
+        <div id="label">—</div>
+        <div id="status"></div>
+    </div>
+
+    <h2>Ostatnie 5 złych zdjęć</h2>
+    <div class="thumbs" id="bad-thumbs"></div>
+
+    <script>
+        let lastTimestamp = 0;
+        let lastBadCount = 0;
+
+        const imgEl = document.getElementById("latest-img");
+        const labelEl = document.getElementById("label");
+        const statusEl = document.getElementById("status");
+        const badThumbsEl = document.getElementById("bad-thumbs");
+
+        async function updateImage() {
+            try {
+                const res = await fetch("/api/latest", { cache: "no-store" });
+                const data = await res.json();
+
+                if (!data.latest) {
+                    labelEl.textContent = "Brak zdjęć";
+                    statusEl.textContent = "";
+                    return;
+                }
+
+                // główne zdjęcie
+                if (data.latest.timestamp > lastTimestamp) {
+                    lastTimestamp = data.latest.timestamp;
+                    imgEl.src = data.latest.url + "?t=" + data.latest.timestamp;
+                    labelEl.textContent = "Kategoria: " + data.latest.category;
+                    statusEl.textContent = "Plik: " + data.latest.filename;
+                }
+
+                // miniaturki złych zdjęć
+                if (data.bad_recent && data.bad_recent.length !== lastBadCount) {
+                    lastBadCount = data.bad_recent.length;
+                    badThumbsEl.innerHTML = "";
+                    data.bad_recent.forEach(item => {
+                        const thumb = document.createElement("img");
+                        thumb.src = item.url + "?t=" + item.timestamp;
+                        thumb.title = item.category + " - " + item.filename;
+                        badThumbsEl.appendChild(thumb);
+                    });
+                }
+            } catch (e) {
+                console.error("Błąd pobierania /api/latest:", e);
+            }
+        }
+
+        setInterval(updateImage, 1000);
+        updateImage();
+    </script>
+</body>
+</html>

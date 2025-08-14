@@ -8,8 +8,13 @@
         #latest-img { max-height: 70vh; max-width: 95vw; border: 2px solid #ccc; border-radius: 8px; background: #fff; }
         #label { margin-top: 1rem; font-size: 1.25rem; font-weight: bold; color: #333; }
         #status { margin-top: .5rem; font-size: .9rem; color: #666; }
-        .thumbs { display: flex; justify-content: center; flex-wrap: wrap; margin-top: 2rem; gap: 10px; }
-        .thumbs img { height: 120px; border: 1px solid #ccc; border-radius: 4px; background: #fff; }
+
+        .thumbs { display: flex; justify-content: center; flex-wrap: wrap; margin-top: 2rem; gap: 14px; }
+        .thumb { background: #fff; border: 1px solid #ccc; border-radius: 6px; padding: 8px; width: 220px; }
+        .thumb img { width: 100%; height: auto; max-height: 160px; object-fit: contain; display: block; }
+        .thumb-meta { margin-top: 6px; font-size: 0.9rem; color: #333; word-break: break-all; }
+        .thumb-meta .cat { font-weight: 700; }
+        .thumb-meta .name { font-size: 0.85rem; color: #555; margin-top: 2px; }
     </style>
 </head>
 <body>
@@ -24,51 +29,76 @@
     <div class="thumbs" id="bad-thumbs"></div>
 
     <script>
-        let lastTimestamp = 0;
-        let lastBadCount = 0;
+        let lastMainTs = 0;           // timestamp ostatniego głównego zdjęcia
+        let lastBadNewestTs = 0;      // timestamp najnowszego złego (bad_recent[0])
 
         const imgEl = document.getElementById("latest-img");
         const labelEl = document.getElementById("label");
         const statusEl = document.getElementById("status");
         const badThumbsEl = document.getElementById("bad-thumbs");
 
-        async function updateImage() {
+        function renderBadThumbs(list) {
+            badThumbsEl.innerHTML = "";
+            list.forEach(item => {
+                const box = document.createElement("div");
+                box.className = "thumb";
+
+                const img = document.createElement("img");
+                img.src = item.url + "?t=" + item.timestamp;
+                img.alt = item.filename;
+                img.title = item.category + " — " + item.filename;
+
+                const meta = document.createElement("div");
+                meta.className = "thumb-meta";
+
+                const cat = document.createElement("div");
+                cat.className = "cat";
+                cat.textContent = "Kategoria: " + item.category;
+
+                const name = document.createElement("div");
+                name.className = "name";
+                name.textContent = "Plik: " + item.filename;
+
+                meta.appendChild(cat);
+                meta.appendChild(name);
+                box.appendChild(img);
+                box.appendChild(meta);
+                badThumbsEl.appendChild(box);
+            });
+        }
+
+        async function update() {
             try {
                 const res = await fetch("/api/latest", { cache: "no-store" });
                 const data = await res.json();
 
-                if (!data.latest) {
-                    labelEl.textContent = "Brak zdjęć";
-                    statusEl.textContent = "";
-                    return;
-                }
-
-                // główne zdjęcie
-                if (data.latest.timestamp > lastTimestamp) {
-                    lastTimestamp = data.latest.timestamp;
+                // Główne zdjęcie (dowolna kategoria)
+                if (data.latest && data.latest.timestamp > lastMainTs) {
+                    lastMainTs = data.latest.timestamp;
                     imgEl.src = data.latest.url + "?t=" + data.latest.timestamp;
                     labelEl.textContent = "Kategoria: " + data.latest.category;
                     statusEl.textContent = "Plik: " + data.latest.filename;
                 }
 
-                // miniaturki złych zdjęć
-                if (data.bad_recent && data.bad_recent.length !== lastBadCount) {
-                    lastBadCount = data.bad_recent.length;
-                    badThumbsEl.innerHTML = "";
-                    data.bad_recent.forEach(item => {
-                        const thumb = document.createElement("img");
-                        thumb.src = item.url + "?t=" + item.timestamp;
-                        thumb.title = item.category + " - " + item.filename;
-                        badThumbsEl.appendChild(thumb);
-                    });
+                // Miniatury złych zdjęć (odśwież tylko, gdy najnowsze złe ma większy timestamp)
+                if (Array.isArray(data.bad_recent) && data.bad_recent.length > 0) {
+                    const newestTs = data.bad_recent[0].timestamp;
+                    if (newestTs > lastBadNewestTs) {
+                        lastBadNewestTs = newestTs;
+                        renderBadThumbs(data.bad_recent);
+                    } else if (badThumbsEl.childElementCount === 0) {
+                        // Inicjalne wyrenderowanie, jeśli brak węzłów (np. pierwszy load)
+                        renderBadThumbs(data.bad_recent);
+                        lastBadNewestTs = newestTs;
+                    }
                 }
             } catch (e) {
                 console.error("Błąd pobierania /api/latest:", e);
             }
         }
 
-        setInterval(updateImage, 1000);
-        updateImage();
+        setInterval(update, 1000); // odświeżanie co 1 s
+        update();
     </script>
 </body>
 </html>
