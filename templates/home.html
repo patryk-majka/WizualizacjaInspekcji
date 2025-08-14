@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Wybór kamery</title>
+</head>
+<body>
+    <h1>Wybierz kamerę do podglądu</h1>
+    <ul>
+        {% for cam in cameras %}
+        <li><a href="{{ url_for('kamera_view', camera_id=cam) }}">Kamera {{ cam }}</a></li>
+        {% endfor %}
+    </ul>
+</body>
+</html>

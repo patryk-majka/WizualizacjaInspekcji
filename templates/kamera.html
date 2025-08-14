@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Kamera {{ camera_id }}</title>
+    <style>
+        img {
+            max-width: 200px;
+            max-height: 200px;
+            display: block;
+        }
+        .image-block {
+            display: inline-block;
+            margin: 10px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>Podgląd zdjęć – Kamera {{ camera_id }}</h1>
+    <a href="{{ url_for('kamera_view', camera_id=other_camera) }}">Przełącz na kamerę {{ other_camera }}</a>
+    <hr>
+
+    <h2>Zdjęcia poprawne (good)</h2>
+    {% for img in good_images %}
+        <div class="image-block">
+            <img src="{{ url_for('serve_image', camera_id=camera_id, category='good', filename=img) }}">
+            <div>{{ img }}</div>
+        </div>
+    {% endfor %}
+
+    <hr>
+    <h2>Zdjęcia złe (bad)</h2>
+    {% for info in bad_images_info %}
+        <div class="image-block">
+            <img src="{{ url_for('serve_image', camera_id=camera_id, category='bad', filename=info.filename) }}">
+            <div>{{ info.filename }}</div>
+            <div>Kategoria: {{ info.category }}</div>
+        </div>
+    {% endfor %}
+</body>
+</html>

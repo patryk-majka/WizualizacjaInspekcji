@@ -1,97 +1,44 @@
-from flask import Flask, render_template, jsonify
-from pathlib import Path
-from collections import deque
+from flask import Flask, render_template, send_from_directory, abort
+import os
 
 app = Flask(__name__)
 
-BASE_DIR = Path("/ftp/ftp/X1/new_images")
-ALLOWED_EXTS = {".jpg", ".jpeg", ".png"}
+# Ścieżka bazowa do katalogów kamer
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# FIFO na ostatnie 5 złych zdjęć (nie "good")
-bad_images_fifo = deque(maxlen=5)
-last_bad_timestamp = 0  # timestamp najnowszego złego zdjęcia już znanego (dla wykrywania nowości)
+@app.route('/kamera/<camera_id>')
+def kamera(camera_id):
+    # Sprawdzamy czy kamera jest X1 lub Y1
+    if camera_id not in ['X1', 'Y1']:
+        abort(404)
 
+    camera_path = os.path.join(BASE_DIR, camera_id)
 
-def get_latest_any_and_bad(limit_bad=5):
-    """
-    Zwraca:
-      - latest_any: dict z najnowszym zdjęciem (dowolna kategoria)
-      - latest_bad: dict z najnowszym złym zdjęciem (katalog inny niż 'good')
-      - top_bad:   lista dictów z ostatnimi 'limit_bad' złymi zdjęciami (posortowane malejąco po czasie)
-    """
-    latest_any = None
-    latest_bad = None
-    bad_list = []
+    # Lista klas (podkatalogów)
+    try:
+        classes = sorted([d for d in os.listdir(camera_path) if os.path.isdir(os.path.join(camera_path, d))])
+    except FileNotFoundError:
+        abort(404)
 
-    if not BASE_DIR.exists():
-        return None, None, []
+    # Zbieramy zdjęcia z podkatalogów
+    images = {}
+    for cls in classes:
+        cls_path = os.path.join(camera_path, cls)
+        imgs = sorted([f for f in os.listdir(cls_path) if f.lower().endswith(('.jpg', '.png', '.jpeg'))])
+        images[cls] = imgs
 
-    for subdir in BASE_DIR.iterdir():
-        if not subdir.is_dir():
-            continue
-        try:
-            for img in subdir.iterdir():
-                if not img.is_file():
-                    continue
-                if img.suffix.lower() not in ALLOWED_EXTS:
-                    continue
-                try:
-                    mtime = img.stat().st_mtime
-                except FileNotFoundError:
-                    continue
+    # Link do drugiej kamery
+    other_camera = 'Y1' if camera_id == 'X1' else 'X1'
 
-                info = {
-                    "filename": img.name,
-                    "category": subdir.name,
-                    "timestamp": mtime,
-                    "url": f"/static/img/new_images/{subdir.name}/{img.name}",
-                }
+    return render_template('index.html', camera_id=camera_id, other_camera=other_camera, images=images)
 
-                if (latest_any is None) or (mtime > latest_any["timestamp"]):
-                    latest_any = info
+@app.route('/img/<camera_id>/<cls>/<filename>')
+def serve_image(camera_id, cls, filename):
+    # Bezpieczeństwo: nie pozwalamy na wyjście poza katalog
+    if camera_id not in ['X1', 'Y1']:
+        abort(404)
+    directory = os.path.join(BASE_DIR, camera_id, cls)
+    return send_from_directory(directory, filename)
 
-                if subdir.name.lower() != "good":
-                    bad_list.append(info)
-                    if (latest_bad is None) or (mtime > latest_bad["timestamp"]):
-                        latest_bad = info
-        except PermissionError:
-            continue
-
-    # posortuj złe malejąco po czasie i weź limit
-    bad_list.sort(key=lambda d: d["timestamp"], reverse=True)
-    top_bad = bad_list[:limit_bad]
-    return latest_any, latest_bad, top_bad
-
-
-@app.route("/")
-def index():
-    return render_template("index.html")
-
-
-@app.route("/api/latest")
-def api_latest():
-    global last_bad_timestamp, bad_images_fifo
-
-    latest_any, latest_bad, top_bad = get_latest_any_and_bad(limit_bad=5)
-
-    # Inicjalizacja FIFO przy pierwszym razie – pokaż od razu 5 ostatnich złych
-    if not bad_images_fifo and top_bad:
-        for item in top_bad:
-            bad_images_fifo.append(item)  # kolejność będzie od najstarszego do najnowszego w deque
-        # ustaw najnowszy timestamp
-        last_bad_timestamp = top_bad[0]["timestamp"]
-
-    # Jeśli pojawiło się nowsze złe zdjęcie – dodaj na początek (FIFO)
-    if latest_bad and latest_bad["timestamp"] > last_bad_timestamp:
-        last_bad_timestamp = latest_bad["timestamp"]
-        bad_images_fifo.appendleft(latest_bad)
-
-    # Zwróć odpowiedź
-    return jsonify({
-        "latest": latest_any,
-        "bad_recent": list(bad_images_fifo)
-    })
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000, debug=True)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
