@@ -1,38 +1,66 @@
-from flask import Flask, render_template, jsonify, send_from_directory
+from flask import Flask, render_template, jsonify
 from pathlib import Path
 
 app = Flask(__name__)
 
+# Katalog źródłowy (fizyczny) ze zdjęciami:
 BASE_DIR = Path("/ftp/ftp/X1/new_images")
 
+# Dozwolone rozszerzenia (możesz dopisać kolejne)
+ALLOWED_EXTS = {".jpg", ".jpeg", ".png"}
+
 def get_latest_image():
-    images = []
-    for subdir in BASE_DIR.iterdir():
-        if subdir.is_dir():
-            for img in subdir.glob("*.jpg"):
-                images.append((img, subdir.name, img.stat().st_mtime))
-    if not images:
+    """
+    Skanuje tylko katalogi bezpośrednio pod BASE_DIR (1 poziom),
+    wybiera najnowszy plik o dozwolonym rozszerzeniu.
+    Zwraca dict z filename, category, timestamp i gotowym URL do <img>.
+    """
+    if not BASE_DIR.exists():
         return None
-    latest = max(images, key=lambda x: x[2])
-    return {
-        "filename": latest[0].name,
-        "category": latest[1],
-        "timestamp": latest[2],
-        "path": f"{latest[1]}/{latest[0].name}"
-    }
+
+    latest = None
+
+    # Iteruj po kategoriach (good, zgrzew, itp.)
+    for subdir in BASE_DIR.iterdir():
+        if not subdir.is_dir():
+            continue
+
+        # Iteruj po plikach w danej kategorii
+        try:
+            for img in subdir.iterdir():
+                if not img.is_file():
+                    continue
+                if img.suffix.lower() not in ALLOWED_EXTS:
+                    continue
+                try:
+                    mtime = img.stat().st_mtime
+                except FileNotFoundError:
+                    # Plik mógł zostać usunięty w trakcie – pomijamy
+                    continue
+
+                if (latest is None) or (mtime > latest["timestamp"]):
+                    latest = {
+                        "filename": img.name,
+                        "category": subdir.name,
+                        "timestamp": mtime,
+                        # UWAGA: korzystamy z domyślnego /static + Twojego symlinka
+                        # static/img/new_images -> /ftp/ftp/X1/new_images
+                        "url": f"/static/img/new_images/{subdir.name}/{img.name}",
+                    }
+        except PermissionError:
+            # Gdyby któryś folder był niedostępny – pomijamy
+            continue
+
+    return latest
 
 @app.route("/")
 def index():
     return render_template("index.html")
 
 @app.route("/api/latest")
-def latest():
-    latest = get_latest_image()
-    return jsonify(latest)
-
-@app.route("/static/img/<category>/<filename>")
-def serve_image(category, filename):
-    return send_from_directory(BASE_DIR / category, filename)
+def api_latest():
+    return jsonify(get_latest_image())
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    # port 8000 jak wcześniej, debug dla wygody
+    app.run(host="0.0.0.0", port=8000, debug=True)
