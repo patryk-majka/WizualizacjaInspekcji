@@ -5,6 +5,9 @@
     <title>Ostatnie zdjęcie – {{ camera }}</title>
     <style>
         body { font-family: Arial, sans-serif; text-align: center; padding: 2rem; background: #f6f6f6; }
+        .camera-switch { margin-bottom: 1rem; }
+        .camera-switch a { padding: 6px 12px; border: 1px solid #888; background: #eee; margin: 0 4px; text-decoration: none; border-radius: 4px; }
+        .camera-switch a.active { background: #444; color: #fff; }
         #latest-img { max-height: 70vh; max-width: 95vw; border: 2px solid #ccc; border-radius: 8px; background: #fff; }
         #label { margin-top: 1rem; font-size: 1.25rem; font-weight: bold; color: #333; }
         #status { margin-top: .5rem; font-size: .9rem; color: #666; }
@@ -15,24 +18,10 @@
         .thumb-meta { margin-top: 6px; font-size: 0.9rem; color: #333; word-break: break-all; }
         .thumb-meta .cat { font-weight: 700; }
         .thumb-meta .name { font-size: 0.85rem; color: #555; margin-top: 2px; }
-
-        .cam-switch { margin-bottom: 1rem; }
-        .cam-switch a {
-            margin: 0 8px;
-            padding: 6px 12px;
-            background: #eee;
-            border-radius: 4px;
-            text-decoration: none;
-            color: #333;
-        }
-        .cam-switch a.active {
-            background: #333;
-            color: #fff;
-        }
     </style>
 </head>
 <body>
-    <div class="cam-switch">
+    <div class="camera-switch">
         <a href="/X1" class="{{ 'active' if camera == 'X1' else '' }}">Kamera X1</a>
         <a href="/Y1" class="{{ 'active' if camera == 'Y1' else '' }}">Kamera Y1</a>
     </div>
@@ -48,7 +37,7 @@
     <div class="thumbs" id="bad-thumbs"></div>
 
     <script>
-        const camera = "{{ camera }}"; // aktualnie wybrana kamera
+        const camera = "{{ camera }}";
         let lastMainTs = 0;
         let lastBadNewestTs = 0;
 
@@ -92,7 +81,6 @@
                 const res = await fetch(`/api/latest/${camera}`, { cache: "no-store" });
                 const data = await res.json();
 
-                // Główne zdjęcie
                 if (data.latest && data.latest.timestamp > lastMainTs) {
                     lastMainTs = data.latest.timestamp;
                     imgEl.src = data.latest.url + "?t=" + data.latest.timestamp;
@@ -100,12 +88,14 @@
                     statusEl.textContent = "Plik: " + data.latest.filename;
                 }
 
-                // Miniatury złych zdjęć
                 if (Array.isArray(data.bad_recent) && data.bad_recent.length > 0) {
                     const newestTs = data.bad_recent[0].timestamp;
-                    if (newestTs > lastBadNewestTs || badThumbsEl.childElementCount === 0) {
+                    if (newestTs > lastBadNewestTs) {
                         lastBadNewestTs = newestTs;
                         renderBadThumbs(data.bad_recent);
+                    } else if (badThumbsEl.childElementCount === 0) {
+                        renderBadThumbs(data.bad_recent);
+                        lastBadNewestTs = newestTs;
                     }
                 }
             } catch (e) {
