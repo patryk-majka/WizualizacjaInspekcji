@@ -1,8 +1,7 @@
 # app.py
-from flask import Flask, render_template, jsonify, send_from_directory, abort
+from flask import Flask, render_template, jsonify, send_file, abort
 from pathlib import Path
 from collections import deque
-import threading
 
 app = Flask(__name__)
 
@@ -13,60 +12,47 @@ CAMERA_DIRS = {
 
 ALLOWED_EXTS = {".jpg", ".jpeg", ".png"}
 
-# Chronione przez lock – osobno dla każdej kamery
-bad_images_fifo = {
-    "X1": deque(maxlen=5),
-    "Y1": deque(maxlen=5),
-}
-last_bad_timestamp = {
-    "X1": 0,
-    "Y1": 0,
-}
-fifo_lock = threading.Lock()
+bad_images_fifo = {camera: deque(maxlen=5) for camera in CAMERA_DIRS}
+last_bad_timestamp = {camera: 0 for camera in CAMERA_DIRS}
 
-def get_latest_any_and_bad(camera, limit_bad=5):
-    base_dir = CAMERA_DIRS.get(camera)
-    if not base_dir or not base_dir.exists():
+
+def get_latest_images(camera, limit_bad=5):
+    base_dir = CAMERA_DIRS[camera]
+    if not base_dir.exists():
         return None, None, []
 
     latest_any = None
     latest_bad = None
     bad_list = []
 
-    for subdir in base_dir.iterdir():
-        if not subdir.is_dir():
+    for category_dir in base_dir.iterdir():
+        if not category_dir.is_dir():
             continue
-        try:
-            for img in subdir.iterdir():
-                if not img.is_file():
-                    continue
-                if img.suffix.lower() not in ALLOWED_EXTS:
-                    continue
-                try:
-                    mtime = img.stat().st_mtime
-                except (FileNotFoundError, PermissionError):
-                    continue
+        for img_path in category_dir.glob("*"):
+            if img_path.suffix.lower() not in ALLOWED_EXTS:
+                continue
+            try:
+                ts = img_path.stat().st_mtime
+            except FileNotFoundError:
+                continue
 
-                info = {
-                    "filename": img.name,
-                    "category": subdir.name,
-                    "timestamp": mtime,
-                    "url": f"/image/{camera}/{subdir.name}/{img.name}",
-                }
+            info = {
+                "filename": img_path.name,
+                "category": category_dir.name,
+                "timestamp": ts,
+                "url": f"/image/{camera}/{category_dir.name}/{img_path.name}"
+            }
 
-                if latest_any is None or mtime > latest_any["timestamp"]:
-                    latest_any = info
+            if latest_any is None or ts > latest_any["timestamp"]:
+                latest_any = info
 
-                if subdir.name.lower() != "good":
-                    bad_list.append(info)
-                    if latest_bad is None or mtime > latest_bad["timestamp"]:
-                        latest_bad = info
-        except PermissionError:
-            continue
+            if category_dir.name.lower() != "good":
+                bad_list.append(info)
+                if latest_bad is None or ts > latest_bad["timestamp"]:
+                    latest_bad = info
 
-    bad_list.sort(key=lambda d: d["timestamp"], reverse=True)
-    top_bad = bad_list[:limit_bad]
-    return latest_any, latest_bad, top_bad
+    bad_list.sort(key=lambda x: x["timestamp"], reverse=True)
+    return latest_any, latest_bad, bad_list[:limit_bad]
 
 
 @app.route("/")
@@ -82,39 +68,34 @@ def api_latest(camera):
     if camera not in CAMERA_DIRS:
         abort(404)
 
-    latest_any, latest_bad, top_bad = get_latest_any_and_bad(camera)
+    global last_bad_timestamp, bad_images_fifo
 
-    with fifo_lock:
-        if not bad_images_fifo[camera] and top_bad:
-            for item in reversed(top_bad):
-                bad_images_fifo[camera].append(item)
-            last_bad_timestamp[camera] = top_bad[0]["timestamp"]
+    latest_any, latest_bad, recent_bad = get_latest_images(camera)
 
-        if latest_bad and latest_bad["timestamp"] > last_bad_timestamp[camera]:
-            last_bad_timestamp[camera] = latest_bad["timestamp"]
-            bad_images_fifo[camera].appendleft(latest_bad)
+    if not bad_images_fifo[camera] and recent_bad:
+        for item in reversed(recent_bad):
+            bad_images_fifo[camera].append(item)
+        last_bad_timestamp[camera] = recent_bad[0]["timestamp"]
 
-        return jsonify({
-            "latest": latest_any if latest_any else {},
-            "bad_recent": list(bad_images_fifo[camera])
-        })
+    if latest_bad and latest_bad["timestamp"] > last_bad_timestamp[camera]:
+        last_bad_timestamp[camera] = latest_bad["timestamp"]
+        bad_images_fifo[camera].appendleft(latest_bad)
+
+    return jsonify({
+        "latest": latest_any,
+        "bad_recent": list(bad_images_fifo[camera])
+    })
 
 
 @app.route("/image/<camera>/<category>/<filename>")
 def serve_image(camera, category, filename):
     if camera not in CAMERA_DIRS:
         abort(404)
-    directory = CAMERA_DIRS[camera] / category
-    file_path = directory / filename
-
-    if not file_path.exists() or not file_path.is_file():
+    img_path = CAMERA_DIRS[camera] / category / filename
+    if not img_path.exists():
         abort(404)
-
-    try:
-        return send_from_directory(directory, filename)
-    except Exception:
-        abort(500)
+    return send_file(img_path, mimetype="image/jpeg")
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000, debug=False, threaded=True)
+    app.run(host="0.0.0.0", port=8000, debug=True)

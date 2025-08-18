@@ -55,6 +55,8 @@
                 const img = document.createElement("img");
                 img.src = item.url + "?t=" + item.timestamp;
                 img.alt = item.filename;
+                img.loading = "lazy";
+                img.title = `${item.category} — ${item.filename}`;
 
                 const meta = document.createElement("div");
                 meta.className = "thumb-meta";
@@ -78,6 +80,8 @@
         async function update() {
             try {
                 const res = await fetch(`/api/latest/${camera}`, { cache: "no-store" });
+                if (!res.ok) return;
+
                 const data = await res.json();
 
                 if (data.latest && data.latest.timestamp > lastMainTs) {
