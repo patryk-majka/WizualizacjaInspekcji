@@ -44,6 +44,22 @@
             text-align: center;
         }
 
+        .modal-buttons {
+            margin-top: 15px;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        .modal-buttons button {
+            background-color: #fff;
+            border: none;
+            padding: 10px 18px;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+
         .modal-arrow {
             position: absolute;
             top: 50%;
@@ -111,16 +127,15 @@
         const modalImg = document.getElementById("modal-img");
         const modalMeta = document.getElementById("modal-meta");
 
-        let badImages = [];
+        let allImages = [];
         let currentIndex = 0;
 
         function renderBadThumbs(list) {
-            badImages = list;  // aktualizacja tablicy złych zdjęć
             badThumbsEl.innerHTML = "";
-            list.forEach((item, index) => {
+            list.forEach(item => {
                 const box = document.createElement("div");
                 box.className = "thumb";
-                box.onclick = () => showModal(index);
+                box.onclick = () => showModal(item);
 
                 const img = document.createElement("img");
                 img.src = item.url + "?t=" + item.timestamp;
@@ -146,15 +161,15 @@
             });
         }
 
-        function showModal(index) {
-            currentIndex = index;
+        function showModal(item) {
+            currentIndex = allImages.findIndex(img => img.url === item.url);
+            if (currentIndex === -1) currentIndex = 0;
             updateModal();
             modal.style.display = "flex";
         }
 
         function updateModal() {
-            if (badImages.length === 0) return;
-            const item = badImages[currentIndex];
+            const item = allImages[currentIndex];
             modalImg.src = item.url + "?t=" + item.timestamp;
             modalMeta.textContent = `${item.category} — ${item.filename}`;
         }
@@ -165,14 +180,14 @@
         }
 
         function prevImage() {
-            if (badImages.length === 0) return;
-            currentIndex = (currentIndex - 1 + badImages.length) % badImages.length;
+            if (allImages.length === 0) return;
+            currentIndex = (currentIndex - 1 + allImages.length) % allImages.length;
             updateModal();
         }
 
         function nextImage() {
-            if (badImages.length === 0) return;
-            currentIndex = (currentIndex + 1) % badImages.length;
+            if (allImages.length === 0) return;
+            currentIndex = (currentIndex + 1) % allImages.length;
             updateModal();
         }
 
@@ -182,6 +197,8 @@
             try {
                 const res = await fetch(`/api/latest/${camera}`, { cache: "no-store" });
                 const data = await res.json();
+
+                allImages = data.all_images || [];
 
                 if (data.latest && data.latest.timestamp > lastMainTs) {
                     lastMainTs = data.latest.timestamp;
@@ -217,6 +234,7 @@
         modal.addEventListener("click", e => {
             if (e.target === modal) closeModal();
         });
+
     </script>
 </body>
 </html>

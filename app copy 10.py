@@ -20,6 +20,7 @@ def get_latest_any_and_bad(camera):
 
     latest_any = None
     bad_list = []
+    all_images = []
 
     for subdir in base_dir.iterdir():
         if not subdir.is_dir():
@@ -41,6 +42,8 @@ def get_latest_any_and_bad(camera):
                 "url": f"/image/{camera}/{subdir.name}/{img.name}",
             }
 
+            all_images.append(info)
+
             if (latest_any is None) or (mtime > latest_any["timestamp"]):
                 latest_any = info
 
@@ -48,7 +51,8 @@ def get_latest_any_and_bad(camera):
                 bad_list.append(info)
 
     bad_list.sort(key=lambda d: d["timestamp"], reverse=True)
-    return latest_any, bad_list[:5]  # ostatnie 5 złych zdjęć
+    all_images.sort(key=lambda d: d["timestamp"], reverse=True)
+    return latest_any, bad_list[:5], all_images
 
 @app.route("/")
 @app.route("/<camera>")
@@ -62,11 +66,12 @@ def api_latest(camera):
     if camera not in CAMERA_DIRS:
         abort(404)
 
-    latest_any, bad_recent = get_latest_any_and_bad(camera)
+    latest_any, bad_recent, all_images = get_latest_any_and_bad(camera)
 
     return jsonify({
         "latest": latest_any,
-        "bad_recent": bad_recent
+        "bad_recent": bad_recent,
+        "all_images": all_images
     })
 
 @app.route("/image/<camera>/<category>/<filename>")
