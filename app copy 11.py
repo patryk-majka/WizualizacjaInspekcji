@@ -13,7 +13,6 @@ CAMERA_DIRS = {
 ALLOWED_EXTS = {".jpg", ".jpeg", ".png"}
 MAX_FILES_PER_CATEGORY = 100  # ograniczenie dla wydajności
 
-
 def get_latest_any_and_bad(camera):
     base_dir = CAMERA_DIRS.get(camera)
     if not base_dir or not base_dir.exists():
@@ -49,20 +48,14 @@ def get_latest_any_and_bad(camera):
                 bad_list.append(info)
 
     bad_list.sort(key=lambda d: d["timestamp"], reverse=True)
-    return latest_any, bad_list[:5]
-
+    return latest_any, bad_list[:5]  # ostatnie 5 złych zdjęć
 
 @app.route("/")
-def index():
-    cameras_data = {}
-    for cam in CAMERA_DIRS:
-        latest, bad = get_latest_any_and_bad(cam)
-        cameras_data[cam] = {
-            "latest": latest,
-            "bad_recent": bad
-        }
-    return render_template("index.html", cameras=cameras_data)
-
+@app.route("/<camera>")
+def index(camera="X1"):
+    if camera not in CAMERA_DIRS:
+        abort(404)
+    return render_template("index.html", camera=camera)
 
 @app.route("/api/latest/<camera>")
 def api_latest(camera):
@@ -70,11 +63,11 @@ def api_latest(camera):
         abort(404)
 
     latest_any, bad_recent = get_latest_any_and_bad(camera)
+
     return jsonify({
         "latest": latest_any,
-        "bad_recent": bad_recent,
+        "bad_recent": bad_recent
     })
-
 
 @app.route("/image/<camera>/<category>/<filename>")
 def serve_image(camera, category, filename):
@@ -84,7 +77,6 @@ def serve_image(camera, category, filename):
     if not directory.exists():
         abort(404)
     return send_from_directory(directory, filename)
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000)
