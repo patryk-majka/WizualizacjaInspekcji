@@ -2,69 +2,112 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <title>Ostatnie zdjęcie – {{ camera }}</title>
+    <title>Wizualizacja – {{ camera }}</title>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; padding: 2rem; background: #f6f6f6; }
-        .camera-switch { margin-bottom: 1rem; }
-        .camera-switch a { padding: 6px 12px; border: 1px solid #888; background: #eee; margin: 0 4px; text-decoration: none; border-radius: 4px; }
-        .camera-switch a.active { background: #444; color: #fff; }
-
-        #latest-img { max-height: 50vh; max-width: 80vw; border: 2px solid #ccc; border-radius: 8px; background: #fff; }
-        #label { margin-top: 1rem; font-size: 1.25rem; font-weight: bold; color: #333; }
-        #status { margin-top: .5rem; font-size: .9rem; color: #666; }
-
-        .thumbs { display: flex; justify-content: center; flex-wrap: wrap; margin-top: 2rem; gap: 16px; }
-        .thumb { background: #fff; border: 1px solid #ccc; border-radius: 6px; padding: 10px; width: 260px; cursor: pointer; transition: transform 0.2s; }
-        .thumb:hover { transform: scale(1.03); }
-        .thumb img { width: 100%; height: auto; max-height: 200px; object-fit: contain; display: block; }
-        .thumb-meta { margin-top: 8px; font-size: 1rem; color: #333; word-break: break-word; }
-        .thumb-meta .cat { font-weight: 700; }
-        .thumb-meta .name { font-size: 0.85rem; color: #555; margin-top: 2px; }
-
-        #modal-overlay {
-            position: fixed;
-            top: 0; left: 0; width: 100vw; height: 100vh;
-            background: rgba(0,0,0,0.8);
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-        }
-
-        #modal-img {
-            max-width: 90vw;
-            max-height: 85vh;
-            border: 3px solid #fff;
-            border-radius: 6px;
-        }
-
-        #modal-caption {
-            color: #fff;
-            margin-top: 12px;
-            font-size: 1.1rem;
+        body {
+            font-family: Arial, sans-serif;
             text-align: center;
+            padding: 2rem;
+            background: #f6f6f6;
         }
 
-        .nav-btn {
-            position: absolute;
-            top: 50%;
-            transform: translateY(-50%);
-            font-size: 2rem;
+        .camera-switch {
+            margin-bottom: 1rem;
+        }
+
+        .camera-switch a {
+            padding: 6px 12px;
+            border: 1px solid #888;
+            background: #eee;
+            margin: 0 4px;
+            text-decoration: none;
+            border-radius: 4px;
+        }
+
+        .camera-switch a.active {
+            background: #444;
             color: #fff;
-            background: rgba(0,0,0,0.4);
-            border: none;
-            padding: 0.5rem 1rem;
+        }
+
+        #latest-img {
+            max-height: 50vh;
+            max-width: 90vw;
+            border: 2px solid #ccc;
+            border-radius: 8px;
+            background: #fff;
+        }
+
+        .thumbs {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 2rem;
+            gap: 16px;
+        }
+
+        .thumb {
+            background: #fff;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            padding: 8px;
+            width: 240px;
             cursor: pointer;
-            z-index: 1001;
         }
 
-        .nav-btn:hover {
-            background: rgba(0,0,0,0.7);
+        .thumb img {
+            width: 100%;
+            height: auto;
+            max-height: 200px;
+            object-fit: contain;
         }
 
-        #prev-btn { left: 20px; }
-        #next-btn { right: 20px; }
+        .thumb-meta {
+            margin-top: 6px;
+            font-size: 0.9rem;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 9999;
+            top: 0; left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.9);
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        .modal.open {
+            display: flex;
+        }
+
+        .modal img {
+            max-height: 90vh;
+            max-width: 90vw;
+        }
+
+        .modal-caption {
+            margin-top: 10px;
+            color: #fff;
+            font-size: 1.1rem;
+        }
+
+        .modal-close, .modal-prev, .modal-next, .modal-fullscreen {
+            position: absolute;
+            top: 20px;
+            font-size: 2rem;
+            color: white;
+            background: none;
+            border: none;
+            cursor: pointer;
+        }
+
+        .modal-close { right: 20px; }
+        .modal-prev { left: 20px; top: 50%; transform: translateY(-50%); }
+        .modal-next { right: 20px; top: 50%; transform: translateY(-50%); }
+        .modal-fullscreen { right: 60px; }
     </style>
 </head>
 <body>
@@ -74,138 +117,95 @@
     </div>
 
     <h1>Ostatnie zdjęcie – {{ camera }}</h1>
-    <div>
-        <img id="latest-img" src="" alt="Brak zdjęcia">
-        <div id="label">—</div>
-        <div id="status"></div>
-    </div>
+    <img id="latest-img" src="" alt="Brak zdjęcia">
 
     <h2>Ostatnie 5 złych zdjęć</h2>
     <div class="thumbs" id="bad-thumbs"></div>
 
-    <!-- Modal -->
-    <div id="modal-overlay">
-        <button class="nav-btn" id="prev-btn">&#8678;</button>
-        <img id="modal-img" src="" alt="Duże zdjęcie">
-        <div id="modal-caption"></div>
-        <button class="nav-btn" id="next-btn">&#8680;</button>
+    <div class="modal" id="img-modal">
+        <button class="modal-close" onclick="closeModal()">×</button>
+        <button class="modal-prev" onclick="prevModal()">←</button>
+        <button class="modal-next" onclick="nextModal()">→</button>
+        <button class="modal-fullscreen" onclick="toggleFullscreen()">⛶</button>
+        <img id="modal-img" src="">
+        <div class="modal-caption" id="modal-caption"></div>
     </div>
 
     <script>
         const camera = "{{ camera }}";
-        let lastMainTs = 0;
-        let lastBadNewestTs = 0;
-
         const imgEl = document.getElementById("latest-img");
-        const labelEl = document.getElementById("label");
-        const statusEl = document.getElementById("status");
         const badThumbsEl = document.getElementById("bad-thumbs");
 
-        const modalOverlay = document.getElementById("modal-overlay");
+        let badList = [];
+        let modalIndex = 0;
+
+        const modal = document.getElementById("img-modal");
         const modalImg = document.getElementById("modal-img");
         const modalCaption = document.getElementById("modal-caption");
-        const prevBtn = document.getElementById("prev-btn");
-        const nextBtn = document.getElementById("next-btn");
 
-        let badImages = [];
-        let currentModalIndex = -1;
+        async function update() {
+            const res = await fetch(`/api/latest/${camera}`);
+            const data = await res.json();
 
-        function openModal(index) {
-            if (index < 0 || index >= badImages.length) return;
-            currentModalIndex = index;
-            const item = badImages[index];
-            modalImg.src = item.url + "?t=" + item.timestamp;
-            modalCaption.textContent = `Kategoria: ${item.category} | Plik: ${item.filename}`;
-            modalOverlay.style.display = "flex";
-        }
-
-        function closeModal() {
-            modalOverlay.style.display = "none";
-            currentModalIndex = -1;
-        }
-
-        function showPrev() {
-            if (currentModalIndex > 0) openModal(currentModalIndex - 1);
-        }
-
-        function showNext() {
-            if (currentModalIndex < badImages.length - 1) openModal(currentModalIndex + 1);
-        }
-
-        modalOverlay.addEventListener("click", e => {
-            if (e.target === modalOverlay) closeModal();
-        });
-
-        document.addEventListener("keydown", e => {
-            if (modalOverlay.style.display === "flex") {
-                if (e.key === "Escape") closeModal();
-                else if (e.key === "ArrowLeft") showPrev();
-                else if (e.key === "ArrowRight") showNext();
+            if (data.latest) {
+                imgEl.src = data.latest.url + "?t=" + data.latest.timestamp;
             }
-        });
 
-        prevBtn.addEventListener("click", e => {
-            e.stopPropagation();
-            showPrev();
-        });
+            if (Array.isArray(data.bad_recent)) {
+                badList = data.bad_recent;
+                renderBadThumbs();
+            }
+        }
 
-        nextBtn.addEventListener("click", e => {
-            e.stopPropagation();
-            showNext();
-        });
-
-        function renderBadThumbs(list) {
-            badImages = list;
+        function renderBadThumbs() {
             badThumbsEl.innerHTML = "";
-            list.forEach((item, index) => {
+            badList.forEach((item, index) => {
                 const box = document.createElement("div");
                 box.className = "thumb";
-                box.addEventListener("click", () => openModal(index));
+                box.onclick = () => openModal(index);
 
                 const img = document.createElement("img");
                 img.src = item.url + "?t=" + item.timestamp;
-                img.alt = item.filename;
 
                 const meta = document.createElement("div");
                 meta.className = "thumb-meta";
+                meta.innerHTML = `<strong>Kategoria:</strong> ${item.category}<br><strong>Plik:</strong> ${item.filename}`;
 
-                const cat = document.createElement("div");
-                cat.className = "cat";
-                cat.textContent = "Kategoria: " + item.category;
-
-                const name = document.createElement("div");
-                name.className = "name";
-                name.textContent = "Plik: " + item.filename;
-
-                meta.appendChild(cat);
-                meta.appendChild(name);
                 box.appendChild(img);
                 box.appendChild(meta);
                 badThumbsEl.appendChild(box);
             });
         }
 
-        async function update() {
-            try {
-                const res = await fetch(`/api/latest/${camera}`, { cache: "no-store" });
-                const data = await res.json();
+        function openModal(index) {
+            modalIndex = index;
+            const item = badList[index];
+            modalImg.src = item.url + "?t=" + item.timestamp;
+            modalCaption.textContent = `Kategoria: ${item.category} | Plik: ${item.filename}`;
+            modal.classList.add("open");
+        }
 
-                if (data.latest && data.latest.timestamp > lastMainTs) {
-                    lastMainTs = data.latest.timestamp;
-                    imgEl.src = data.latest.url + "?t=" + data.latest.timestamp;
-                    labelEl.textContent = "Kategoria: " + data.latest.category;
-                    statusEl.textContent = "Plik: " + data.latest.filename;
-                }
+        function closeModal() {
+            modal.classList.remove("open");
+        }
 
-                if (Array.isArray(data.bad_recent) && data.bad_recent.length > 0) {
-                    const newestTs = data.bad_recent[0].timestamp;
-                    if (newestTs > lastBadNewestTs || badThumbsEl.childElementCount === 0) {
-                        lastBadNewestTs = newestTs;
-                        renderBadThumbs(data.bad_recent);
-                    }
-                }
-            } catch (e) {
-                console.error("Błąd pobierania /api/latest:", e);
+        function prevModal() {
+            if (modalIndex > 0) {
+                openModal(modalIndex - 1);
+            }
+        }
+
+        function nextModal() {
+            if (modalIndex < badList.length - 1) {
+                openModal(modalIndex + 1);
+            }
+        }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                modal.requestFullscreen().catch(err => console.error(err));
+            } else {
+                document.exitFullscreen();
             }
         }
 

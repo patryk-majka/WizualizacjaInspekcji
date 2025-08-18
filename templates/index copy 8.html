@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Ostatnie zdjęcie – {{ camera }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 2rem; background: #f6f6f6; }
+        .camera-switch { margin-bottom: 1rem; }
+        .camera-switch a { padding: 6px 12px; border: 1px solid #888; background: #eee; margin: 0 4px; text-decoration: none; border-radius: 4px; }
+        .camera-switch a.active { background: #444; color: #fff; }
+
+        #latest-img { max-height: 50vh; max-width: 80vw; border: 2px solid #ccc; border-radius: 8px; background: #fff; }
+        #label { margin-top: 1rem; font-size: 1.25rem; font-weight: bold; color: #333; }
+        #status { margin-top: .5rem; font-size: .9rem; color: #666; }
+
+        .thumbs { display: flex; justify-content: center; flex-wrap: wrap; margin-top: 2rem; gap: 16px; }
+        .thumb { background: #fff; border: 1px solid #ccc; border-radius: 6px; padding: 10px; width: 260px; cursor: pointer; transition: transform 0.2s; }
+        .thumb:hover { transform: scale(1.03); }
+        .thumb img { width: 100%; height: auto; max-height: 200px; object-fit: contain; display: block; }
+        .thumb-meta { margin-top: 8px; font-size: 1rem; color: #333; word-break: break-word; }
+        .thumb-meta .cat { font-weight: 700; }
+        .thumb-meta .name { font-size: 0.85rem; color: #555; margin-top: 2px; }
+
+        #modal-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.8);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        #modal-img {
+            max-width: 90vw;
+            max-height: 85vh;
+            border: 3px solid #fff;
+            border-radius: 6px;
+        }
+
+        #modal-caption {
+            color: #fff;
+            margin-top: 12px;
+            font-size: 1.1rem;
+            text-align: center;
+        }
+
+        .nav-btn {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 2rem;
+            color: #fff;
+            background: rgba(0,0,0,0.4);
+            border: none;
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            z-index: 1001;
+        }
+
+        .nav-btn:hover {
+            background: rgba(0,0,0,0.7);
+        }
+
+        #prev-btn { left: 20px; }
+        #next-btn { right: 20px; }
+    </style>
+</head>
+<body>
+    <div class="camera-switch">
+        <a href="/X1" class="{{ 'active' if camera == 'X1' else '' }}">Kamera X1</a>
+        <a href="/Y1" class="{{ 'active' if camera == 'Y1' else '' }}">Kamera Y1</a>
+    </div>
+
+    <h1>Ostatnie zdjęcie – {{ camera }}</h1>
+    <div>
+        <img id="latest-img" src="" alt="Brak zdjęcia">
+        <div id="label">—</div>
+        <div id="status"></div>
+    </div>
+
+    <h2>Ostatnie 5 złych zdjęć</h2>
+    <div class="thumbs" id="bad-thumbs"></div>
+
+    <!-- Modal -->
+    <div id="modal-overlay">
+        <button class="nav-btn" id="prev-btn">&#8678;</button>
+        <img id="modal-img" src="" alt="Duże zdjęcie">
+        <div id="modal-caption"></div>
+        <button class="nav-btn" id="next-btn">&#8680;</button>
+    </div>
+
+    <script>
+        const camera = "{{ camera }}";
+        let lastMainTs = 0;
+        let lastBadNewestTs = 0;
+
+        const imgEl = document.getElementById("latest-img");
+        const labelEl = document.getElementById("label");
+        const statusEl = document.getElementById("status");
+        const badThumbsEl = document.getElementById("bad-thumbs");
+
+        const modalOverlay = document.getElementById("modal-overlay");
+        const modalImg = document.getElementById("modal-img");
+        const modalCaption = document.getElementById("modal-caption");
+        const prevBtn = document.getElementById("prev-btn");
+        const nextBtn = document.getElementById("next-btn");
+
+        let badImages = [];
+        let currentModalIndex = -1;
+
+        function openModal(index) {
+            if (index < 0 || index >= badImages.length) return;
+            currentModalIndex = index;
+            const item = badImages[index];
+            modalImg.src = item.url + "?t=" + item.timestamp;
+            modalCaption.textContent = `Kategoria: ${item.category} | Plik: ${item.filename}`;
+            modalOverlay.style.display = "flex";
+        }
+
+        function closeModal() {
+            modalOverlay.style.display = "none";
+            currentModalIndex = -1;
+        }
+
+        function showPrev() {
+            if (currentModalIndex > 0) openModal(currentModalIndex - 1);
+        }
+
+        function showNext() {
+            if (currentModalIndex < badImages.length - 1) openModal(currentModalIndex + 1);
+        }
+
+        modalOverlay.addEventListener("click", e => {
+            if (e.target === modalOverlay) closeModal();
+        });
+
+        document.addEventListener("keydown", e => {
+            if (modalOverlay.style.display === "flex") {
+                if (e.key === "Escape") closeModal();
+                else if (e.key === "ArrowLeft") showPrev();
+                else if (e.key === "ArrowRight") showNext();
+            }
+        });
+
+        prevBtn.addEventListener("click", e => {
+            e.stopPropagation();
+            showPrev();
+        });
+
+        nextBtn.addEventListener("click", e => {
+            e.stopPropagation();
+            showNext();
+        });
+
+        function renderBadThumbs(list) {
+            badImages = list;
+            badThumbsEl.innerHTML = "";
+            list.forEach((item, index) => {
+                const box = document.createElement("div");
+                box.className = "thumb";
+                box.addEventListener("click", () => openModal(index));
+
+                const img = document.createElement("img");
+                img.src = item.url + "?t=" + item.timestamp;
+                img.alt = item.filename;
+
+                const meta = document.createElement("div");
+                meta.className = "thumb-meta";
+
+                const cat = document.createElement("div");
+                cat.className = "cat";
+                cat.textContent = "Kategoria: " + item.category;
+
+                const name = document.createElement("div");
+                name.className = "name";
+                name.textContent = "Plik: " + item.filename;
+
+                meta.appendChild(cat);
+                meta.appendChild(name);
+                box.appendChild(img);
+                box.appendChild(meta);
+                badThumbsEl.appendChild(box);
+            });
+        }
+
+        async function update() {
+            try {
+                const res = await fetch(`/api/latest/${camera}`, { cache: "no-store" });
+                const data = await res.json();
+
+                if (data.latest && data.latest.timestamp > lastMainTs) {
+                    lastMainTs = data.latest.timestamp;
+                    imgEl.src = data.latest.url + "?t=" + data.latest.timestamp;
+                    labelEl.textContent = "Kategoria: " + data.latest.category;
+                    statusEl.textContent = "Plik: " + data.latest.filename;
+                }
+
+                if (Array.isArray(data.bad_recent) && data.bad_recent.length > 0) {
+                    const newestTs = data.bad_recent[0].timestamp;
+                    if (newestTs > lastBadNewestTs || badThumbsEl.childElementCount === 0) {
+                        lastBadNewestTs = newestTs;
+                        renderBadThumbs(data.bad_recent);
+                    }
+                }
+            } catch (e) {
+                console.error("Błąd pobierania /api/latest:", e);
+            }
+        }
+
+        setInterval(update, 1000);
+        update();
+    </script>
+</body>
+</html>
