@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Wizualizacja – {{ camera }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 2rem;
+            background: #f6f6f6;
+        }
+
+        .camera-switch {
+            margin-bottom: 1rem;
+        }
+
+        .camera-switch a {
+            padding: 6px 12px;
+            border: 1px solid #888;
+            background: #eee;
+            margin: 0 4px;
+            text-decoration: none;
+            border-radius: 4px;
+        }
+
+        .camera-switch a.active {
+            background: #444;
+            color: #fff;
+        }
+
+        #latest-img {
+            max-height: 50vh;
+            max-width: 90vw;
+            border: 2px solid #ccc;
+            border-radius: 8px;
+            background: #fff;
+        }
+
+        .thumbs {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 2rem;
+            gap: 16px;
+        }
+
+        .thumb {
+            background: #fff;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            padding: 8px;
+            width: 240px;
+            cursor: pointer;
+        }
+
+        .thumb img {
+            width: 100%;
+            height: auto;
+            max-height: 200px;
+            object-fit: contain;
+        }
+
+        .thumb-meta {
+            margin-top: 6px;
+            font-size: 0.9rem;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 9999;
+            top: 0; left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.9);
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        .modal.open {
+            display: flex;
+        }
+
+        .modal img {
+            max-height: 90vh;
+            max-width: 90vw;
+        }
+
+        .modal-caption {
+            margin-top: 10px;
+            color: #fff;
+            font-size: 1.1rem;
+        }
+
+        .modal-close, .modal-prev, .modal-next, .modal-fullscreen {
+            position: absolute;
+            top: 20px;
+            font-size: 2rem;
+            color: white;
+            background: none;
+            border: none;
+            cursor: pointer;
+        }
+
+        .modal-close { right: 20px; }
+        .modal-prev { left: 20px; top: 50%; transform: translateY(-50%); }
+        .modal-next { right: 20px; top: 50%; transform: translateY(-50%); }
+        .modal-fullscreen { right: 60px; }
+    </style>
+</head>
+<body>
+    <div class="camera-switch">
+        <a href="/X1" class="{{ 'active' if camera == 'X1' else '' }}">Kamera X1</a>
+        <a href="/Y1" class="{{ 'active' if camera == 'Y1' else '' }}">Kamera Y1</a>
+    </div>
+
+    <h1>Ostatnie zdjęcie – {{ camera }}</h1>
+    <img id="latest-img" src="" alt="Brak zdjęcia">
+
+    <h2>Ostatnie 5 złych zdjęć</h2>
+    <div class="thumbs" id="bad-thumbs"></div>
+
+    <div class="modal" id="img-modal">
+        <button class="modal-close" onclick="closeModal()">×</button>
+        <button class="modal-prev" onclick="prevModal()">←</button>
+        <button class="modal-next" onclick="nextModal()">→</button>
+        <button class="modal-fullscreen" onclick="toggleFullscreen()">⛶</button>
+        <img id="modal-img" src="">
+        <div class="modal-caption" id="modal-caption"></div>
+    </div>
+
+    <script>
+        const camera = "{{ camera }}";
+        const imgEl = document.getElementById("latest-img");
+        const badThumbsEl = document.getElementById("bad-thumbs");
+
+        let badList = [];
+        let modalIndex = 0;
+
+        const modal = document.getElementById("img-modal");
+        const modalImg = document.getElementById("modal-img");
+        const modalCaption = document.getElementById("modal-caption");
+
+        async function update() {
+            const res = await fetch(`/api/latest/${camera}`);
+            const data = await res.json();
+
+            if (data.latest) {
+                imgEl.src = data.latest.url + "?t=" + data.latest.timestamp;
+            }
+
+            if (Array.isArray(data.bad_recent)) {
+                badList = data.bad_recent;
+                renderBadThumbs();
+            }
+        }
+
+        function renderBadThumbs() {
+            badThumbsEl.innerHTML = "";
+            badList.forEach((item, index) => {
+                const box = document.createElement("div");
+                box.className = "thumb";
+                box.onclick = () => openModal(index);
+
+                const img = document.createElement("img");
+                img.src = item.url + "?t=" + item.timestamp;
+
+                const meta = document.createElement("div");
+                meta.className = "thumb-meta";
+                meta.innerHTML = `<strong>Kategoria:</strong> ${item.category}<br><strong>Plik:</strong> ${item.filename}`;
+
+                box.appendChild(img);
+                box.appendChild(meta);
+                badThumbsEl.appendChild(box);
+            });
+        }
+
+        function openModal(index) {
+            modalIndex = index;
+            const item = badList[index];
+            modalImg.src = item.url + "?t=" + item.timestamp;
+            modalCaption.textContent = `Kategoria: ${item.category} | Plik: ${item.filename}`;
+            modal.classList.add("open");
+        }
+
+        function closeModal() {
+            modal.classList.remove("open");
+        }
+
+        function prevModal() {
+            if (modalIndex > 0) {
+                openModal(modalIndex - 1);
+            }
+        }
+
+        function nextModal() {
+            if (modalIndex < badList.length - 1) {
+                openModal(modalIndex + 1);
+            }
+        }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                modal.requestFullscreen().catch(err => console.error(err));
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        setInterval(update, 2000);
+        update();
+    </script>
+</body>
+</html>
