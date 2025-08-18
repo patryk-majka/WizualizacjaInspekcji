@@ -29,7 +29,7 @@
         }
 
         .modal-content {
-            max-width: 90%; max-height: 90%; position: relative;
+            max-width: 90%; max-height: 90%;
         }
 
         .modal img {
@@ -59,30 +59,6 @@
             font-size: 1rem;
             cursor: pointer;
         }
-
-        .modal-arrow {
-            position: absolute;
-            top: 50%;
-            transform: translateY(-50%);
-            font-size: 3rem;
-            color: #fff;
-            cursor: pointer;
-            user-select: none;
-            padding: 0 10px;
-        }
-
-        .modal-arrow.left { left: 0; }
-        .modal-arrow.right { right: 0; }
-
-        .modal-close {
-            position: absolute;
-            top: 10px;
-            right: 15px;
-            font-size: 2rem;
-            color: #fff;
-            cursor: pointer;
-            user-select: none;
-        }
     </style>
 </head>
 <body>
@@ -104,11 +80,12 @@
     <!-- Modal -->
     <div class="modal" id="image-modal">
         <div class="modal-content">
-            <span class="modal-close" onclick="closeModal()">×</span>
-            <span class="modal-arrow left" onclick="prevImage()">❮</span>
-            <span class="modal-arrow right" onclick="nextImage()">❯</span>
             <img id="modal-img" src="" alt="">
             <div class="modal-meta" id="modal-meta"></div>
+            <div class="modal-buttons">
+                <button onclick="closeModal()">Zamknij</button>
+                <button onclick="toggleFullscreen()">Pełny ekran</button>
+            </div>
         </div>
     </div>
 
@@ -126,9 +103,6 @@
         const modal = document.getElementById("image-modal");
         const modalImg = document.getElementById("modal-img");
         const modalMeta = document.getElementById("modal-meta");
-
-        let allImages = [];
-        let currentIndex = 0;
 
         function renderBadThumbs(list) {
             badThumbsEl.innerHTML = "";
@@ -162,33 +136,24 @@
         }
 
         function showModal(item) {
-            currentIndex = allImages.findIndex(img => img.url === item.url);
-            if (currentIndex === -1) currentIndex = 0;
-            updateModal();
-            modal.style.display = "flex";
-        }
-
-        function updateModal() {
-            const item = allImages[currentIndex];
-            modalImg.src = item.url + "?t=" + item.timestamp;
+            modalImg.src = item.url;
             modalMeta.textContent = `${item.category} — ${item.filename}`;
+            modal.style.display = "flex";
         }
 
         function closeModal() {
             modal.style.display = "none";
-            if (document.fullscreenElement) document.exitFullscreen();
+            if (document.fullscreenElement) {
+                document.exitFullscreen();
+            }
         }
 
-        function prevImage() {
-            if (allImages.length === 0) return;
-            currentIndex = (currentIndex - 1 + allImages.length) % allImages.length;
-            updateModal();
-        }
-
-        function nextImage() {
-            if (allImages.length === 0) return;
-            currentIndex = (currentIndex + 1) % allImages.length;
-            updateModal();
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                modal.requestFullscreen().catch(err => console.warn(err));
+            } else {
+                document.exitFullscreen();
+            }
         }
 
         async function update() {
@@ -197,8 +162,6 @@
             try {
                 const res = await fetch(`/api/latest/${camera}`, { cache: "no-store" });
                 const data = await res.json();
-
-                allImages = data.all_images || [];
 
                 if (data.latest && data.latest.timestamp > lastMainTs) {
                     lastMainTs = data.latest.timestamp;
@@ -224,17 +187,10 @@
         setInterval(update, 2000);
         update();
 
-        // Modal: ESC to close, click on background to close, arrow keys
+        // ESC to close modal
         window.addEventListener("keydown", e => {
             if (e.key === "Escape") closeModal();
-            if (e.key === "ArrowLeft") prevImage();
-            if (e.key === "ArrowRight") nextImage();
         });
-
-        modal.addEventListener("click", e => {
-            if (e.target === modal) closeModal();
-        });
-
     </script>
 </body>
 </html>
