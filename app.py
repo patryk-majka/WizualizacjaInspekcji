@@ -49,7 +49,7 @@ def get_latest_any_and_bad(camera):
                 bad_list.append(info)
 
     bad_list.sort(key=lambda d: d["timestamp"], reverse=True)
-    return latest_any, bad_list[:21] # Limit to 21 bad images for performance
+    return latest_any, bad_list[:10] # Limit to 21 bad images for performance
 
 
 @app.route("/")
