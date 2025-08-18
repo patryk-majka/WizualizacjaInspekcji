@@ -44,16 +44,21 @@
 <body>
     <h1>Ostatnie zdjęcia kamer X1 i Y1</h1>
     <div class="container">
-        {% for cam, data in cameras.items() %}
-        <div class="camera-panel" id="panel-{{ cam }}">
-            <h2>Kamera {{ cam }}</h2>
-            <img id="latest-{{ cam }}" class="latest-img" src="{{ data.latest.url if data.latest else '' }}" alt="Brak zdjęcia">
-            <div id="label-{{ cam }}">{{ data.latest.category if data.latest else '—' }}</div>
-
+        <div class="camera-panel" id="panel-X1">
+            <h2>Kamera X1</h2>
+            <img id="latest-X1" class="latest-img" src="" alt="Brak zdjęcia">
+            <div id="label-X1">—</div>
             <h3>Ostatnie 5 złych zdjęć</h3>
-            <div class="thumbs" id="thumbs-{{ cam }}"></div>
+            <div class="thumbs" id="thumbs-X1"></div>
         </div>
-        {% endfor %}
+
+        <div class="camera-panel" id="panel-Y1">
+            <h2>Kamera Y1</h2>
+            <img id="latest-Y1" class="latest-img" src="" alt="Brak zdjęcia">
+            <div id="label-Y1">—</div>
+            <h3>Ostatnie 5 złych zdjęć</h3>
+            <div class="thumbs" id="thumbs-Y1"></div>
+        </div>
     </div>
 
     <!-- Modal -->
@@ -68,46 +73,30 @@
     </div>
 
     <script>
-        const cameras = {{ cameras | tojson | safe }};
-        let badImages = {};
+        const camerasList = ['X1', 'Y1'];
+        let badImages = { X1: [], Y1: [] };
         let currentCam = '';
         let currentIndex = 0;
-
-        // Renderowanie miniatur i zapis złych zdjęć
-        function renderAllThumbs() {
-            for (const cam in cameras) {
-                const list = cameras[cam].bad_recent || [];
-                badImages[cam] = list;
-
-                const thumbsEl = document.getElementById('thumbs-' + cam);
-                thumbsEl.innerHTML = "";
-                list.forEach((item, index) => {
-                    const box = document.createElement("div");
-                    box.className = "thumb";
-                    box.onclick = () => showModal(cam, index);
-
-                    const img = document.createElement("img");
-                    img.src = item.url + "?t=" + item.timestamp;
-                    img.alt = item.filename;
-                    box.appendChild(img);
-                    thumbsEl.appendChild(box);
-                });
-
-                // aktualizacja ostatniego zdjęcia
-                const latestImg = document.getElementById('latest-' + cam);
-                const label = document.getElementById('label-' + cam);
-                if (cameras[cam].latest) {
-                    latestImg.src = cameras[cam].latest.url + "?t=" + cameras[cam].latest.timestamp;
-                    label.textContent = cameras[cam].latest.category;
-                }
-            }
-        }
-
-        renderAllThumbs();
 
         const modal = document.getElementById("image-modal");
         const modalImg = document.getElementById("modal-img");
         const modalMeta = document.getElementById("modal-meta");
+
+        // Renderowanie miniatur
+        function renderThumbs(cam) {
+            const thumbsEl = document.getElementById('thumbs-' + cam);
+            thumbsEl.innerHTML = "";
+            badImages[cam].forEach((item, index) => {
+                const box = document.createElement("div");
+                box.className = "thumb";
+                box.onclick = () => showModal(cam, index);
+                const img = document.createElement("img");
+                img.src = item.url + "?t=" + item.timestamp;
+                img.alt = item.filename;
+                box.appendChild(img);
+                thumbsEl.appendChild(box);
+            });
+        }
 
         function showModal(cam, index) {
             currentCam = cam;
@@ -153,20 +142,33 @@
             if (e.target === modal) closeModal();
         });
 
-        // automatyczne odświeżanie
+        // Pobieranie danych z API i odświeżanie
         async function updateCameras() {
-            for (const cam in cameras) {
+            for (const cam of camerasList) {
                 try {
                     const res = await fetch(`/api/latest/${cam}`, {cache:"no-store"});
                     const data = await res.json();
-                    cameras[cam] = data;
+
+                    // aktualizacja ostatniego zdjęcia
+                    const latestImg = document.getElementById('latest-' + cam);
+                    const label = document.getElementById('label-' + cam);
+                    if (data.latest) {
+                        latestImg.src = data.latest.url + "?t=" + data.latest.timestamp;
+                        label.textContent = data.latest.category;
+                    }
+
+                    // aktualizacja złych zdjęć
+                    badImages[cam] = data.bad_recent || [];
+                    renderThumbs(cam);
+
                 } catch(e) {
                     console.error("Błąd API:", e);
                 }
             }
-            renderAllThumbs();
         }
 
+        // Start i interwał 2 sekundy
+        updateCameras();
         setInterval(updateCameras, 2000);
     </script>
 </body>
