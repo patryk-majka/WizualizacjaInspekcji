@@ -1,3 +1,4 @@
+<!-- app.py -->
 <!DOCTYPE html>
 <html lang="pl">
 <head>
@@ -15,7 +16,7 @@
         .thumbs { display: flex; justify-content: center; flex-wrap: wrap; margin-top: 2rem; gap: 14px; }
         .thumb { background: #fff; border: 1px solid #ccc; border-radius: 6px; padding: 8px; width: 220px; }
         .thumb img { width: 100%; height: auto; max-height: 160px; object-fit: contain; display: block; }
-        .thumb-meta { margin-top: 6px; font-size: 0.9rem; color: #333; word-break: break-word; }
+        .thumb-meta { margin-top: 6px; font-size: 0.9rem; color: #333; word-break: break-all; }
         .thumb-meta .cat { font-weight: 700; }
         .thumb-meta .name { font-size: 0.85rem; color: #555; margin-top: 2px; }
     </style>
@@ -55,8 +56,7 @@
                 const img = document.createElement("img");
                 img.src = item.url + "?t=" + item.timestamp;
                 img.alt = item.filename;
-                img.loading = "lazy";
-                img.title = `${item.category} — ${item.filename}`;
+                img.title = item.category + " — " + item.filename;
 
                 const meta = document.createElement("div");
                 meta.className = "thumb-meta";
@@ -80,8 +80,6 @@
         async function update() {
             try {
                 const res = await fetch(`/api/latest/${camera}`, { cache: "no-store" });
-                if (!res.ok) return;
-
                 const data = await res.json();
 
                 if (data.latest && data.latest.timestamp > lastMainTs) {
@@ -93,9 +91,12 @@
 
                 if (Array.isArray(data.bad_recent) && data.bad_recent.length > 0) {
                     const newestTs = data.bad_recent[0].timestamp;
-                    if (newestTs > lastBadNewestTs || badThumbsEl.childElementCount === 0) {
+                    if (newestTs > lastBadNewestTs) {
                         lastBadNewestTs = newestTs;
                         renderBadThumbs(data.bad_recent);
+                    } else if (badThumbsEl.childElementCount === 0) {
+                        renderBadThumbs(data.bad_recent);
+                        lastBadNewestTs = newestTs;
                     }
                 }
             } catch (e) {
