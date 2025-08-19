@@ -48,6 +48,7 @@
 
         .modal-close { position:absolute; top:10px; right:15px; font-size:2rem; color:#fff; cursor:pointer; user-select:none; }
     </style>
+    <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -92,6 +93,8 @@
     <audio id="beep-sound" src="/static/beep.mp3" preload="auto"></audio>
 
     <script>
+        const socket = io();  // automatycznie łączy z tym samym hostem
+
         const lastBadTimestamps = { X1: 0, Y1: 0 };
         const soundToggles = {
             X1: () => document.getElementById('sound-toggle-X1').checked,
@@ -99,7 +102,6 @@
         };
         const beepAudio = document.getElementById("beep-sound");
 
-        const camerasList = ['X1', 'Y1'];
         let badImages = { X1: [], Y1: [] };
         let currentCam = '';
         let currentIndex = 0;
@@ -108,6 +110,7 @@
         const modalImg = document.getElementById("modal-img");
         const modalMeta = document.getElementById("modal-meta");
 
+        // renderowanie miniatur
         function renderThumbs(cam) {
             const thumbsEl = document.getElementById('thumbs-' + cam);
             thumbsEl.innerHTML = "";
@@ -123,107 +126,52 @@
             });
         }
 
-        function showModal(cam, index) {
-            currentCam = cam;
-            currentIndex = index;
-            updateModal();
-            modal.style.display = "flex";
-        }
+        // obsługa modala
+        function showModal(cam, index) { currentCam = cam; currentIndex = index; updateModal(); modal.style.display = "flex"; }
+        function updateModal() { const list = badImages[currentCam]; if(!list || !list.length) return; const item = list[currentIndex]; modalImg.src = item.url + "?t=" + item.timestamp; modalMeta.textContent = `${currentCam}: ${item.category} — ${item.filename}`; }
+        function closeModal() { modal.style.display = "none"; if(document.fullscreenElement) document.exitFullscreen(); }
+        function prevImage() { const list = badImages[currentCam]; if(!list) return; currentIndex = (currentIndex-1+list.length)%list.length; updateModal(); }
+        function nextImage() { const list = badImages[currentCam]; if(!list) return; currentIndex = (currentIndex+1)%list.length; updateModal(); }
+        window.addEventListener("keydown", e => { if(e.key==="Escape") closeModal(); if(e.key==="ArrowLeft") prevImage(); if(e.key==="ArrowRight") nextImage(); });
+        modal.addEventListener("click", e => { if(e.target===modal) closeModal(); });
 
-        function updateModal() {
-            const list = badImages[currentCam];
-            if (!list || list.length === 0) return;
-            const item = list[currentIndex];
-            modalImg.src = item.url + "?t=" + item.timestamp;
-            modalMeta.textContent = `${currentCam}: ${item.category} — ${item.filename}`;
-        }
+        // --- WebSocket --- //
+        socket.on("camera_update", data => {
+            const cam = data.camera;
+            const latest = data.latest;
+            const badList = data.bad_recent || [];
 
-        function closeModal() {
-            modal.style.display = "none";
-            if (document.fullscreenElement) document.exitFullscreen();
-        }
+            // aktualizacja elementu latest
+            const latestImg = document.getElementById('latest-' + cam);
+            const label = document.getElementById('label-' + cam);
 
-        function prevImage() {
-            const list = badImages[currentCam];
-            if (!list) return;
-            currentIndex = (currentIndex - 1 + list.length) % list.length;
-            updateModal();
-        }
+            if(latest){
+                latestImg.src = latest.url + "?t=" + latest.timestamp;
+                label.textContent = latest.category;
 
-        function nextImage() {
-            const list = badImages[currentCam];
-            if (!list) return;
-            currentIndex = (currentIndex + 1) % list.length;
-            updateModal();
-        }
+                // usuń poprzednie klasy
+                label.classList.remove("label-good","label-bad");
+                latestImg.classList.remove("img-border-good","img-border-bad");
 
-        window.addEventListener("keydown", e => {
-            if (e.key === "Escape") closeModal();
-            if (e.key === "ArrowLeft") prevImage();
-            if (e.key === "ArrowRight") nextImage();
-        });
+                if(latest.category.toLowerCase()==="good"){
+                    label.classList.add("label-good");
+                    latestImg.classList.add("img-border-good");
+                } else {
+                    label.classList.add("label-bad");
+                    latestImg.classList.add("img-border-bad");
 
-        modal.addEventListener("click", e => {
-            if (e.target === modal) closeModal();
-        });
-
-        async function updateCameras() {
-            for (const cam of camerasList) {
-                try {
-                    const res = await fetch(`/api/latest/${cam}`, {cache:"no-store"});
-                    const data = await res.json();
-
-                    const latestImg = document.getElementById('latest-' + cam);
-                    const label = document.getElementById('label-' + cam);
-
-                    if (data.latest) {
-                        latestImg.src = data.latest.url + "?t=" + data.latest.timestamp;
-                        label.textContent = data.latest.category;
-
-                        // usuń poprzednie klasy
-                        label.classList.remove("label-good", "label-bad");
-                        latestImg.classList.remove("img-border-good", "img-border-bad");
-
-                        // dodaj odpowiednie klasy kolorów
-                        if (data.latest.category.toLowerCase() === "good") {
-                            label.classList.add("label-good");
-                            latestImg.classList.add("img-border-good");
-                        } else {
-                            label.classList.add("label-bad");
-                            latestImg.classList.add("img-border-bad");
-                        }
+                    // dźwięk jeśli zaznaczony
+                    if(latest.timestamp > lastBadTimestamps[cam] && soundToggles[cam]()){
+                        lastBadTimestamps[cam] = latest.timestamp;
+                        beepAudio.currentTime=0; beepAudio.play().catch(()=>{});
                     }
-
-                    const badList = data.bad_recent || [];
-
-                    // Sprawdź, czy pojawiło się nowsze złe zdjęcie
-                    if (badList.length > 0) {
-                        const latestBad = badList[0];
-                        if (latestBad.timestamp > lastBadTimestamps[cam]) {
-                            lastBadTimestamps[cam] = latestBad.timestamp;
-
-                            if (soundToggles[cam]()) {
-                                beepAudio.currentTime = 0;
-                                beepAudio.play().catch(e => {
-                                    // Dźwięk może nie działać bez interakcji użytkownika
-                                    console.warn("Nie można odtworzyć dźwięku:", e);
-                                });
-                            }
-                        }
-                    }
-
-                    badImages[cam] = badList;
-                    renderThumbs(cam);
-
-
-                } catch(e) {
-                    console.error("Błąd API:", e);
                 }
             }
-        }
 
-        updateCameras();
-        setInterval(updateCameras, 2000);
-    </script>
+            badImages[cam] = badList;
+            renderThumbs(cam);
+        });
+</script>
+
 </body>
 </html>

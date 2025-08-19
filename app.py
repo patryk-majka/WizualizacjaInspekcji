@@ -1,10 +1,16 @@
-# app.py - działający
-from flask import Flask, render_template, jsonify, send_from_directory, abort
+# app.py
+from flask import Flask, render_template, send_from_directory, abort
+from flask_socketio import SocketIO
 from pathlib import Path
+import time
+import eventlet
+import threading
+
+eventlet.monkey_patch()  # bardzo ważne dla WebSocket
 
 app = Flask(__name__)
+socketio = SocketIO(app, async_mode='eventlet', cors_allowed_origins="*")
 
-# Kamera → katalog bazowy
 CAMERA_DIRS = {
     "X1": Path("/ftp/ftp/X1/new_images"),
     "Y1": Path("/ftp/ftp/Y1/new_images"),
@@ -13,7 +19,7 @@ CAMERA_DIRS = {
 ALLOWED_EXTS = {".jpg", ".jpeg", ".png"}
 MAX_FILES_PER_CATEGORY = 100  # ograniczenie dla wydajności
 
-
+# Funkcja pobierająca najnowsze zdjęcia i złe zdjęcia
 def get_latest_any_and_bad(camera):
     base_dir = CAMERA_DIRS.get(camera)
     if not base_dir or not base_dir.exists():
@@ -49,32 +55,11 @@ def get_latest_any_and_bad(camera):
                 bad_list.append(info)
 
     bad_list.sort(key=lambda d: d["timestamp"], reverse=True)
-    return latest_any, bad_list[:10] # Limit to 21 bad images for performance
-
+    return latest_any, bad_list[:10]
 
 @app.route("/")
 def index():
-    cameras_data = {}
-    for cam in CAMERA_DIRS:
-        latest, bad = get_latest_any_and_bad(cam)
-        cameras_data[cam] = {
-            "latest": latest,
-            "bad_recent": bad
-        }
-    return render_template("index.html", cameras=cameras_data)
-
-
-@app.route("/api/latest/<camera>")
-def api_latest(camera):
-    if camera not in CAMERA_DIRS:
-        abort(404)
-
-    latest_any, bad_recent = get_latest_any_and_bad(camera)
-    return jsonify({
-        "latest": latest_any,
-        "bad_recent": bad_recent,
-    })
-
+    return render_template("index.html")
 
 @app.route("/image/<camera>/<category>/<filename>")
 def serve_image(camera, category, filename):
@@ -85,6 +70,25 @@ def serve_image(camera, category, filename):
         abort(404)
     return send_from_directory(directory, filename)
 
+# --- WebSocket --- #
+def watch_cameras():
+    last_timestamps = {cam: 0 for cam in CAMERA_DIRS}
+
+    while True:
+        for cam in CAMERA_DIRS:
+            latest, bad = get_latest_any_and_bad(cam)
+            if latest and latest["timestamp"] > last_timestamps[cam]:
+                last_timestamps[cam] = latest["timestamp"]
+                # Emitujemy do wszystkich połączeń
+                socketio.emit("camera_update", {
+                    "camera": cam,
+                    "latest": latest,
+                    "bad_recent": bad
+                })
+        eventlet.sleep(0.3)  # co 300ms sprawdzamy katalogi
+
+# Uruchamiamy wątkiem współbieżnym
+threading.Thread(target=watch_cameras, daemon=True).start()
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8001, debug=False)
+    socketio.run(app, host="0.0.0.0", port=8001, debug=False)
