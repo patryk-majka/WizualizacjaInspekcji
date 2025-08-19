@@ -221,12 +221,8 @@
             }
         }
 
-        function updateLoop() {
-            updateCameras().finally(() => {
-                setTimeout(updateLoop, 300);
-            });
-        }
-        updateLoop();
+        updateCameras();
+        setInterval(updateCameras, 2000);
     </script>
 </body>
 </html>

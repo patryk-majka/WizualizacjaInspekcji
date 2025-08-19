@@ -49,7 +49,8 @@ def get_latest_any_and_bad(camera):
                 bad_list.append(info)
 
     bad_list.sort(key=lambda d: d["timestamp"], reverse=True)
-    return latest_any, bad_list[:10] # Limit to 21 bad images for performance
+    recent_all = sorted([latest_any] + bad_list, key=lambda d: d["timestamp"], reverse=True)
+    return recent_all[:20], bad_list[:10]
 
 
 @app.route("/")
@@ -69,9 +70,9 @@ def api_latest(camera):
     if camera not in CAMERA_DIRS:
         abort(404)
 
-    latest_any, bad_recent = get_latest_any_and_bad(camera)
+    recent_latest, bad_recent = get_latest_any_and_bad(camera)
     return jsonify({
-        "latest": latest_any,
+        "latest_all": recent_latest,
         "bad_recent": bad_recent,
     })
 
