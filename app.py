@@ -1,25 +1,22 @@
-# app.py
 from flask import Flask, render_template, send_from_directory, abort
 from flask_socketio import SocketIO
 from pathlib import Path
 import time
-import eventlet
 import threading
 
-eventlet.monkey_patch()  # bardzo ważne dla WebSocket
-
 app = Flask(__name__)
-socketio = SocketIO(app, async_mode='eventlet', cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*")
 
+# Kamera → katalog bazowy
 CAMERA_DIRS = {
     "X1": Path("/ftp/ftp/X1/new_images"),
     "Y1": Path("/ftp/ftp/Y1/new_images"),
 }
 
 ALLOWED_EXTS = {".jpg", ".jpeg", ".png"}
-MAX_FILES_PER_CATEGORY = 100  # ograniczenie dla wydajności
+MAX_FILES_PER_CATEGORY = 100
+last_known = {}
 
-# Funkcja pobierająca najnowsze zdjęcia i złe zdjęcia
 def get_latest_any_and_bad(camera):
     base_dir = CAMERA_DIRS.get(camera)
     if not base_dir or not base_dir.exists():
@@ -70,25 +67,25 @@ def serve_image(camera, category, filename):
         abort(404)
     return send_from_directory(directory, filename)
 
-# --- WebSocket --- #
-def watch_cameras():
-    last_timestamps = {cam: 0 for cam in CAMERA_DIRS}
-
+def monitor_changes():
+    global last_known
     while True:
         for cam in CAMERA_DIRS:
             latest, bad = get_latest_any_and_bad(cam)
-            if latest and latest["timestamp"] > last_timestamps[cam]:
-                last_timestamps[cam] = latest["timestamp"]
-                # Emitujemy do wszystkich połączeń
+            if latest and (cam not in last_known or latest["timestamp"] > last_known[cam]):
+                last_known[cam] = latest["timestamp"]
                 socketio.emit("camera_update", {
                     "camera": cam,
                     "latest": latest,
                     "bad_recent": bad
                 })
-        eventlet.sleep(0.3)  # co 300ms sprawdzamy katalogi
+        time.sleep(0.3)
 
-# Uruchamiamy wątkiem współbieżnym
-threading.Thread(target=watch_cameras, daemon=True).start()
+@socketio.on("connect")
+def handle_connect():
+    print("Client connected")
 
 if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=8001, debug=False)
+    thread = threading.Thread(target=monitor_changes, daemon=True)
+    thread.start()
+    socketio.run(app, host="0.0.0.0", port=8001, debug=True)

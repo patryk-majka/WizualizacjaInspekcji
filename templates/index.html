@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<!-- index.html działający-->
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
     <title>System inspekcji paczek</title>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" integrity="sha384-dTJ0fPqv+aFvVRh5gqwbQUsz4TwbmczOAPMBvJKfY0aE8cRDPyg8Nwz7xF4ZQGsl" crossorigin="anonymous"></script>
     <style>
         body { font-family: Arial, sans-serif; margin:0; padding:1rem; background:#f0f0f0; }
         .container { display:flex; justify-content: space-between; gap:10px; }
@@ -25,14 +25,12 @@
         .thumb { background:#fff; border:1px solid #ccc; border-radius:6px; padding:4px; width:120px; cursor:pointer; }
         .thumb img { width:100%; height:auto; max-height:100px; object-fit:contain; }
 
-        /* Kolory dla kategorii i obramowania */
         .label-good { color: green; font-weight: bold; }
         .label-bad { color: red; font-weight: bold; }
 
         .img-border-good { border-color: green !important; }
         .img-border-bad { border-color: red !important; }
 
-        /* Modal */
         .modal {
             display:none; position:fixed; z-index:999; left:0; top:0;
             width:100%; height:100%; background-color: rgba(0,0,0,0.85);
@@ -48,7 +46,6 @@
 
         .modal-close { position:absolute; top:10px; right:15px; font-size:2rem; color:#fff; cursor:pointer; user-select:none; }
     </style>
-    <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -93,24 +90,56 @@
     <audio id="beep-sound" src="/static/beep.mp3" preload="auto"></audio>
 
     <script>
-        const socket = io();  // automatycznie łączy z tym samym hostem
+        const socket = io();
+        const badImages = { X1: [], Y1: [] };
+        const lastTimestamps = { X1: 0, Y1: 0 };
+        const camerasList = ['X1', 'Y1'];
 
-        const lastBadTimestamps = { X1: 0, Y1: 0 };
+        const modal = document.getElementById("image-modal");
+        const modalImg = document.getElementById("modal-img");
+        const modalMeta = document.getElementById("modal-meta");
+        let currentCam = '', currentIndex = 0;
+
         const soundToggles = {
             X1: () => document.getElementById('sound-toggle-X1').checked,
             Y1: () => document.getElementById('sound-toggle-Y1').checked
         };
         const beepAudio = document.getElementById("beep-sound");
 
-        let badImages = { X1: [], Y1: [] };
-        let currentCam = '';
-        let currentIndex = 0;
+        socket.on("camera_update", data => {
+            const cam = data.camera;
+            const latest = data.latest;
+            const badList = data.bad_recent || [];
 
-        const modal = document.getElementById("image-modal");
-        const modalImg = document.getElementById("modal-img");
-        const modalMeta = document.getElementById("modal-meta");
+            const latestImg = document.getElementById("latest-" + cam);
+            const label = document.getElementById("label-" + cam);
 
-        // renderowanie miniatur
+            if (latest && latest.timestamp > lastTimestamps[cam]) {
+                lastTimestamps[cam] = latest.timestamp;
+                latestImg.src = latest.url + "?t=" + latest.timestamp;
+                label.textContent = latest.category;
+
+                label.classList.remove("label-good", "label-bad");
+                latestImg.classList.remove("img-border-good", "img-border-bad");
+
+                if (latest.category.toLowerCase() === "good") {
+                    label.classList.add("label-good");
+                    latestImg.classList.add("img-border-good");
+                } else {
+                    label.classList.add("label-bad");
+                    latestImg.classList.add("img-border-bad");
+
+                    if (soundToggles[cam]()) {
+                        beepAudio.currentTime = 0;
+                        beepAudio.play().catch(e => console.warn("Błąd dźwięku:", e));
+                    }
+                }
+
+                badImages[cam] = badList;
+                renderThumbs(cam);
+            }
+        });
+
         function renderThumbs(cam) {
             const thumbsEl = document.getElementById('thumbs-' + cam);
             thumbsEl.innerHTML = "";
@@ -126,52 +155,49 @@
             });
         }
 
-        // obsługa modala
-        function showModal(cam, index) { currentCam = cam; currentIndex = index; updateModal(); modal.style.display = "flex"; }
-        function updateModal() { const list = badImages[currentCam]; if(!list || !list.length) return; const item = list[currentIndex]; modalImg.src = item.url + "?t=" + item.timestamp; modalMeta.textContent = `${currentCam}: ${item.category} — ${item.filename}`; }
-        function closeModal() { modal.style.display = "none"; if(document.fullscreenElement) document.exitFullscreen(); }
-        function prevImage() { const list = badImages[currentCam]; if(!list) return; currentIndex = (currentIndex-1+list.length)%list.length; updateModal(); }
-        function nextImage() { const list = badImages[currentCam]; if(!list) return; currentIndex = (currentIndex+1)%list.length; updateModal(); }
-        window.addEventListener("keydown", e => { if(e.key==="Escape") closeModal(); if(e.key==="ArrowLeft") prevImage(); if(e.key==="ArrowRight") nextImage(); });
-        modal.addEventListener("click", e => { if(e.target===modal) closeModal(); });
+        function showModal(cam, index) {
+            currentCam = cam;
+            currentIndex = index;
+            updateModal();
+            modal.style.display = "flex";
+        }
 
-        // --- WebSocket --- //
-        socket.on("camera_update", data => {
-            const cam = data.camera;
-            const latest = data.latest;
-            const badList = data.bad_recent || [];
+        function updateModal() {
+            const list = badImages[currentCam];
+            if (!list || list.length === 0) return;
+            const item = list[currentIndex];
+            modalImg.src = item.url + "?t=" + item.timestamp;
+            modalMeta.textContent = `${currentCam}: ${item.category} — ${item.filename}`;
+        }
 
-            // aktualizacja elementu latest
-            const latestImg = document.getElementById('latest-' + cam);
-            const label = document.getElementById('label-' + cam);
+        function closeModal() {
+            modal.style.display = "none";
+            if (document.fullscreenElement) document.exitFullscreen();
+        }
 
-            if(latest){
-                latestImg.src = latest.url + "?t=" + latest.timestamp;
-                label.textContent = latest.category;
+        function prevImage() {
+            const list = badImages[currentCam];
+            if (!list) return;
+            currentIndex = (currentIndex - 1 + list.length) % list.length;
+            updateModal();
+        }
 
-                // usuń poprzednie klasy
-                label.classList.remove("label-good","label-bad");
-                latestImg.classList.remove("img-border-good","img-border-bad");
+        function nextImage() {
+            const list = badImages[currentCam];
+            if (!list) return;
+            currentIndex = (currentIndex + 1) % list.length;
+            updateModal();
+        }
 
-                if(latest.category.toLowerCase()==="good"){
-                    label.classList.add("label-good");
-                    latestImg.classList.add("img-border-good");
-                } else {
-                    label.classList.add("label-bad");
-                    latestImg.classList.add("img-border-bad");
-
-                    // dźwięk jeśli zaznaczony
-                    if(latest.timestamp > lastBadTimestamps[cam] && soundToggles[cam]()){
-                        lastBadTimestamps[cam] = latest.timestamp;
-                        beepAudio.currentTime=0; beepAudio.play().catch(()=>{});
-                    }
-                }
-            }
-
-            badImages[cam] = badList;
-            renderThumbs(cam);
+        window.addEventListener("keydown", e => {
+            if (e.key === "Escape") closeModal();
+            if (e.key === "ArrowLeft") prevImage();
+            if (e.key === "ArrowRight") nextImage();
         });
-</script>
 
+        modal.addEventListener("click", e => {
+            if (e.target === modal) closeModal();
+        });
+    </script>
 </body>
 </html>
