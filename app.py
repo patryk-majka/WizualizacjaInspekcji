@@ -65,5 +65,7 @@ def start_watchers():
         thread.start()
 
 if __name__ == "__main__":
-    start_watchers()
+    import eventlet
+    import eventlet.wsgi
     socketio.run(app, host="0.0.0.0", port=8000)
+
