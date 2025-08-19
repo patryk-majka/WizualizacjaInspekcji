@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <title>System inspekcji paczek</title>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" integrity="sha384-dTJ0fPqv+aFvVRh5gqwbQUsz4TwbmczOAPMBvJKfY0aE8cRDPyg8Nwz7xF4ZQGsl" crossorigin="anonymous"></script>
     <style>
         body { font-family: Arial, sans-serif; margin:0; padding:1rem; background:#f0f0f0; }
         .container { display:flex; justify-content: space-between; gap:10px; }
@@ -76,7 +75,6 @@
         </div>
     </div>
 
-    <!-- Modal -->
     <div class="modal" id="image-modal">
         <div class="modal-content">
             <span class="modal-close" onclick="closeModal()">×</span>
@@ -89,33 +87,29 @@
 
     <audio id="beep-sound" src="/static/beep.mp3" preload="auto"></audio>
 
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js" integrity="sha384-QdK9TJY1SIdFhSxEfL9Gso06Ndd3QxSw2hhS+DBWDLUHa3EO3Lo7Er4G+gfQPCtM" crossorigin="anonymous"></script>
     <script>
         const socket = io();
-        const badImages = { X1: [], Y1: [] };
-        const lastTimestamps = { X1: 0, Y1: 0 };
-        const camerasList = ['X1', 'Y1'];
-
-        const modal = document.getElementById("image-modal");
-        const modalImg = document.getElementById("modal-img");
-        const modalMeta = document.getElementById("modal-meta");
-        let currentCam = '', currentIndex = 0;
-
+        const lastBadTimestamps = { X1: 0, Y1: 0 };
         const soundToggles = {
             X1: () => document.getElementById('sound-toggle-X1').checked,
             Y1: () => document.getElementById('sound-toggle-Y1').checked
         };
         const beepAudio = document.getElementById("beep-sound");
+        let badImages = { X1: [], Y1: [] };
+        let currentCam = '';
+        let currentIndex = 0;
 
         socket.on("camera_update", data => {
             const cam = data.camera;
             const latest = data.latest;
-            const badList = data.bad_recent || [];
+            const badRecent = data.bad_recent || [];
 
-            const latestImg = document.getElementById("latest-" + cam);
-            const label = document.getElementById("label-" + cam);
+            // Zaktualizuj główne zdjęcie
+            const latestImg = document.getElementById('latest-' + cam);
+            const label = document.getElementById('label-' + cam);
 
-            if (latest && latest.timestamp > lastTimestamps[cam]) {
-                lastTimestamps[cam] = latest.timestamp;
+            if (latest) {
                 latestImg.src = latest.url + "?t=" + latest.timestamp;
                 label.textContent = latest.category;
 
@@ -129,15 +123,19 @@
                     label.classList.add("label-bad");
                     latestImg.classList.add("img-border-bad");
 
-                    if (soundToggles[cam]()) {
-                        beepAudio.currentTime = 0;
-                        beepAudio.play().catch(e => console.warn("Błąd dźwięku:", e));
+                    if (latest.timestamp > lastBadTimestamps[cam]) {
+                        lastBadTimestamps[cam] = latest.timestamp;
+                        if (soundToggles[cam]()) {
+                            beepAudio.currentTime = 0;
+                            beepAudio.play().catch(err => console.warn("Błąd odtwarzania dźwięku:", err));
+                        }
                     }
                 }
-
-                badImages[cam] = badList;
-                renderThumbs(cam);
             }
+
+            // Miniaturki
+            badImages[cam] = badRecent;
+            renderThumbs(cam);
         });
 
         function renderThumbs(cam) {
@@ -154,6 +152,10 @@
                 thumbsEl.appendChild(box);
             });
         }
+
+        const modal = document.getElementById("image-modal");
+        const modalImg = document.getElementById("modal-img");
+        const modalMeta = document.getElementById("modal-meta");
 
         function showModal(cam, index) {
             currentCam = cam;
@@ -172,7 +174,6 @@
 
         function closeModal() {
             modal.style.display = "none";
-            if (document.fullscreenElement) document.exitFullscreen();
         }
 
         function prevImage() {

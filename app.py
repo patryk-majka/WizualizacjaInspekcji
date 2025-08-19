@@ -1,11 +1,11 @@
 from flask import Flask, render_template, send_from_directory, abort
 from flask_socketio import SocketIO
 from pathlib import Path
-import time
-import threading
+import eventlet
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
+eventlet.monkey_patch()
 
 # Kamera → katalog bazowy
 CAMERA_DIRS = {
@@ -15,7 +15,6 @@ CAMERA_DIRS = {
 
 ALLOWED_EXTS = {".jpg", ".jpeg", ".png"}
 MAX_FILES_PER_CATEGORY = 100
-last_known = {}
 
 def get_latest_any_and_bad(camera):
     base_dir = CAMERA_DIRS.get(camera)
@@ -29,8 +28,11 @@ def get_latest_any_and_bad(camera):
         if not subdir.is_dir():
             continue
 
-        files = sorted(subdir.glob("*"), key=lambda f: f.stat().st_mtime, reverse=True)
-        files = [f for f in files if f.suffix.lower() in ALLOWED_EXTS][:MAX_FILES_PER_CATEGORY]
+        files = sorted(
+            [f for f in subdir.glob("*") if f.suffix.lower() in ALLOWED_EXTS],
+            key=lambda f: f.stat().st_mtime,
+            reverse=True
+        )[:MAX_FILES_PER_CATEGORY]
 
         for img in files:
             try:
@@ -67,25 +69,24 @@ def serve_image(camera, category, filename):
         abort(404)
     return send_from_directory(directory, filename)
 
-def monitor_changes():
-    global last_known
+def monitor_images():
+    last_timestamps = {cam: 0 for cam in CAMERA_DIRS}
     while True:
         for cam in CAMERA_DIRS:
             latest, bad = get_latest_any_and_bad(cam)
-            if latest and (cam not in last_known or latest["timestamp"] > last_known[cam]):
-                last_known[cam] = latest["timestamp"]
+            if latest and latest["timestamp"] > last_timestamps[cam]:
+                last_timestamps[cam] = latest["timestamp"]
                 socketio.emit("camera_update", {
                     "camera": cam,
                     "latest": latest,
-                    "bad_recent": bad
+                    "bad_recent": bad,
                 })
-        time.sleep(0.3)
+        eventlet.sleep(0.3)
 
-@socketio.on("connect")
-def handle_connect():
-    print("Client connected")
+@socketio.on('connect')
+def on_connect():
+    print("WebSocket connected")
 
 if __name__ == "__main__":
-    thread = threading.Thread(target=monitor_changes, daemon=True)
-    thread.start()
+    eventlet.spawn(monitor_images)
     socketio.run(app, host="0.0.0.0", port=8001, debug=True)
