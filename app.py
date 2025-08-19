@@ -1,13 +1,11 @@
-# app.py
 from flask import Flask, render_template, send_from_directory, abort
 from flask_socketio import SocketIO
 from threading import Thread
 from pathlib import Path
 import time
-import os
 
-app = Flask(__name__)
-socketio = SocketIO(app)
+app = Flask(__name__, static_folder="static", template_folder="templates")
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 CAMERA_DIRS = {
     "X1": Path("/ftp/ftp/X1/new_images"),
@@ -20,6 +18,7 @@ SEEN_FILES = {"X1": set(), "Y1": set()}
 def watch_folder(camera):
     base_dir = CAMERA_DIRS[camera]
     if not base_dir.exists():
+        print(f"[watcher] Directory for {camera} not found: {base_dir}")
         return
 
     while True:
@@ -44,7 +43,7 @@ def watch_folder(camera):
                 }
                 SEEN_FILES[camera].add(file.name)
                 socketio.emit("new_image", info)
-        time.sleep(0.2)
+        time.sleep(0.1)  # 100ms polling
 
 @app.route("/")
 def index():
@@ -64,8 +63,7 @@ def start_watchers():
         thread = Thread(target=watch_folder, args=(cam,), daemon=True)
         thread.start()
 
-if __name__ == "__main__":
-    import eventlet
-    import eventlet.wsgi
-    socketio.run(app, host="0.0.0.0", port=8000)
+start_watchers()
 
+if __name__ == "__main__":
+    socketio.run(app, host="0.0.0.0", port=8000)
