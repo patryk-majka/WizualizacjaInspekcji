@@ -52,6 +52,11 @@
     <div class="container">
         <div class="camera-panel" id="panel-X1">
             <h2>Kamera X1</h2>
+            <label>
+                <input type="checkbox" id="sound-toggle-X1" checked>
+                Sygnał dźwiękowy
+            </label>
+            <br>
             <img id="latest-X1" class="latest-img" src="" alt="Brak zdjęcia">
             <div id="label-X1">—</div>
             <h3>Ostatnie 10 wadliwych paczek</h3>
@@ -60,6 +65,11 @@
 
         <div class="camera-panel" id="panel-Y1">
             <h2>Kamera Y1</h2>
+            <label>
+                <input type="checkbox" id="sound-toggle-Y1" checked>
+                Sygnał dźwiękowy
+            </label>
+            <br>
             <img id="latest-Y1" class="latest-img" src="" alt="Brak zdjęcia">
             <div id="label-Y1">—</div>
             <h3>Ostatnie 10 wadliwych paczek</h3>
@@ -79,6 +89,13 @@
     </div>
 
     <script>
+        const lastBadTimestamps = { X1: 0, Y1: 0 };
+        const soundToggles = {
+            X1: () => document.getElementById('sound-toggle-X1').checked,
+            Y1: () => document.getElementById('sound-toggle-Y1').checked
+        };
+        const beepAudio = document.getElementById("beep-sound");
+
         const camerasList = ['X1', 'Y1'];
         let badImages = { X1: [], Y1: [] };
         let currentCam = '';
@@ -174,8 +191,27 @@
                         }
                     }
 
-                    badImages[cam] = data.bad_recent || [];
+                    const badList = data.bad_recent || [];
+
+                    // Sprawdź, czy pojawiło się nowsze złe zdjęcie
+                    if (badList.length > 0) {
+                        const latestBad = badList[0];
+                        if (latestBad.timestamp > lastBadTimestamps[cam]) {
+                            lastBadTimestamps[cam] = latestBad.timestamp;
+
+                            if (soundToggles[cam]()) {
+                                beepAudio.currentTime = 0;
+                                beepAudio.play().catch(e => {
+                                    // Dźwięk może nie działać bez interakcji użytkownika
+                                    console.warn("Nie można odtworzyć dźwięku:", e);
+                                });
+                            }
+                        }
+                    }
+
+                    badImages[cam] = badList;
                     renderThumbs(cam);
+
 
                 } catch(e) {
                     console.error("Błąd API:", e);
@@ -186,5 +222,6 @@
         updateCameras();
         setInterval(updateCameras, 2000);
     </script>
+    <audio id="beep-sound" src="/static/bep.mp3" preload="auto"></audio>
 </body>
 </html>
