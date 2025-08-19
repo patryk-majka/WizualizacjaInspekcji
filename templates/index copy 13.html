@@ -18,18 +18,11 @@
 
         .camera-panel h2 { margin-top:0; }
 
-        .latest-img { max-height: 50vh; max-width: 90%; border:4px solid #ccc; border-radius:8px; transition: border 0.2s; }
+        .latest-img { max-height: 50vh; max-width: 90%; border:2px solid #ccc; border-radius:8px; }
 
         .thumbs { display:flex; justify-content:center; flex-wrap:wrap; margin-top:10px; gap:10px; }
         .thumb { background:#fff; border:1px solid #ccc; border-radius:6px; padding:4px; width:120px; cursor:pointer; }
         .thumb img { width:100%; height:auto; max-height:100px; object-fit:contain; }
-
-        /* Kolory dla kategorii i obramowania */
-        .label-good { color: green; font-weight: bold; }
-        .label-bad { color: red; font-weight: bold; }
-
-        .img-border-good { border-color: green !important; }
-        .img-border-bad { border-color: red !important; }
 
         /* Modal */
         .modal {
@@ -49,6 +42,7 @@
     </style>
 </head>
 <body>
+    <!-- <h1>System inspekcji paczek</h1> -->
     <div class="container">
         <div class="camera-panel" id="panel-X1">
             <h2>Kamera X1</h2>
@@ -88,6 +82,7 @@
         const modalImg = document.getElementById("modal-img");
         const modalMeta = document.getElementById("modal-meta");
 
+        // Renderowanie miniatur
         function renderThumbs(cam) {
             const thumbsEl = document.getElementById('thumbs-' + cam);
             thumbsEl.innerHTML = "";
@@ -147,33 +142,22 @@
             if (e.target === modal) closeModal();
         });
 
+        // Pobieranie danych z API i odświeżanie
         async function updateCameras() {
             for (const cam of camerasList) {
                 try {
                     const res = await fetch(`/api/latest/${cam}`, {cache:"no-store"});
                     const data = await res.json();
 
+                    // aktualizacja ostatniego zdjęcia
                     const latestImg = document.getElementById('latest-' + cam);
                     const label = document.getElementById('label-' + cam);
-
                     if (data.latest) {
                         latestImg.src = data.latest.url + "?t=" + data.latest.timestamp;
                         label.textContent = data.latest.category;
-
-                        // usuń poprzednie klasy
-                        label.classList.remove("label-good", "label-bad");
-                        latestImg.classList.remove("img-border-good", "img-border-bad");
-
-                        // dodaj odpowiednie klasy kolorów
-                        if (data.latest.category.toLowerCase() === "good") {
-                            label.classList.add("label-good");
-                            latestImg.classList.add("img-border-good");
-                        } else {
-                            label.classList.add("label-bad");
-                            latestImg.classList.add("img-border-bad");
-                        }
                     }
 
+                    // aktualizacja złych zdjęć
                     badImages[cam] = data.bad_recent || [];
                     renderThumbs(cam);
 
@@ -183,6 +167,7 @@
             }
         }
 
+        // Start i interwał 2 sekundy
         updateCameras();
         setInterval(updateCameras, 2000);
     </script>
