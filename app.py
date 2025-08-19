@@ -1,4 +1,4 @@
-# app.py
+# app.py - działający
 from flask import Flask, render_template, jsonify, send_from_directory, abort
 from pathlib import Path
 
