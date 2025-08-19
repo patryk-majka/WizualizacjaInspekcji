@@ -1,7 +1,13 @@
-from flask import Flask, render_template, send_from_directory, abort
-from flask_socketio import SocketIO
-from pathlib import Path
+# app.py
+
 import eventlet
+eventlet.monkey_patch()  # <- musi być przed WSZYSTKIM innym
+
+import os
+import time
+from flask import Flask, render_template, send_from_directory
+from flask_socketio import SocketIO
+from threading import Thread
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
