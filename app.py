@@ -1,53 +1,81 @@
-from flask import Flask, render_template, send_from_directory, abort
-from flask_socketio import SocketIO
-from threading import Thread
+# app.py
+from flask import Flask, render_template, jsonify, send_from_directory, abort
 from pathlib import Path
-import time
 
-app = Flask(__name__, static_folder="static", template_folder="templates")
-socketio = SocketIO(app, cors_allowed_origins="*")
+app = Flask(__name__)
 
+# Kamera → katalog bazowy
 CAMERA_DIRS = {
     "X1": Path("/ftp/ftp/X1/new_images"),
     "Y1": Path("/ftp/ftp/Y1/new_images"),
 }
 
 ALLOWED_EXTS = {".jpg", ".jpeg", ".png"}
-SEEN_FILES = {"X1": set(), "Y1": set()}
+MAX_FILES_PER_CATEGORY = 100  # ograniczenie dla wydajności
 
-def watch_folder(camera):
-    base_dir = CAMERA_DIRS[camera]
-    if not base_dir.exists():
-        print(f"[watcher] Directory for {camera} not found: {base_dir}")
-        return
 
-    while True:
-        for subdir in base_dir.iterdir():
-            if not subdir.is_dir():
+def get_latest_any_and_bad(camera):
+    base_dir = CAMERA_DIRS.get(camera)
+    if not base_dir or not base_dir.exists():
+        return None, []
+
+    latest_any = None
+    bad_list = []
+
+    for subdir in base_dir.iterdir():
+        if not subdir.is_dir():
+            continue
+
+        files = sorted(subdir.glob("*"), key=lambda f: f.stat().st_mtime, reverse=True)
+        files = [f for f in files if f.suffix.lower() in ALLOWED_EXTS][:MAX_FILES_PER_CATEGORY]
+
+        for img in files:
+            try:
+                mtime = img.stat().st_mtime
+            except FileNotFoundError:
                 continue
-            for file in sorted(subdir.glob("*")):
-                if file.suffix.lower() not in ALLOWED_EXTS:
-                    continue
-                if file.name in SEEN_FILES[camera]:
-                    continue
-                try:
-                    mtime = file.stat().st_mtime
-                except FileNotFoundError:
-                    continue
-                info = {
-                    "filename": file.name,
-                    "category": subdir.name,
-                    "timestamp": mtime,
-                    "url": f"/image/{camera}/{subdir.name}/{file.name}",
-                    "camera": camera,
-                }
-                SEEN_FILES[camera].add(file.name)
-                socketio.emit("new_image", info)
-        time.sleep(0.1)  # 100ms polling
+
+            info = {
+                "filename": img.name,
+                "category": subdir.name,
+                "timestamp": mtime,
+                "url": f"/image/{camera}/{subdir.name}/{img.name}",
+            }
+
+            if (latest_any is None) or (mtime > latest_any["timestamp"]):
+                latest_any = info
+
+            if subdir.name.lower() != "good":
+                bad_list.append(info)
+
+    bad_list.sort(key=lambda d: d["timestamp"], reverse=True)
+    recent_all = sorted([latest_any] + bad_list, key=lambda d: d["timestamp"], reverse=True)
+    return recent_all[:20], bad_list[:10]
+
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    cameras_data = {}
+    for cam in CAMERA_DIRS:
+        latest, bad = get_latest_any_and_bad(cam)
+        cameras_data[cam] = {
+            "latest": latest,
+            "bad_recent": bad
+        }
+    return render_template("index.html", cameras=cameras_data)
+
+
+@app.route("/api/latest/<camera>")
+def api_latest(camera):
+    if camera not in CAMERA_DIRS:
+        abort(404)
+
+    recent_latest, bad_recent = get_latest_any_and_bad(camera)
+    return jsonify({
+        "latest_all": recent_latest,
+        "bad_recent": bad_recent,
+    })
+
 
 @app.route("/image/<camera>/<category>/<filename>")
 def serve_image(camera, category, filename):
@@ -58,12 +86,6 @@ def serve_image(camera, category, filename):
         abort(404)
     return send_from_directory(directory, filename)
 
-def start_watchers():
-    for cam in CAMERA_DIRS:
-        thread = Thread(target=watch_folder, args=(cam,), daemon=True)
-        thread.start()
-
-start_watchers()
 
 if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=8000)
+    app.run(host="0.0.0.0", port=8000, debug=False)

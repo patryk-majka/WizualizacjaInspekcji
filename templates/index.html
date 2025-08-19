@@ -1,106 +1,228 @@
 <!DOCTYPE html>
 <html lang="pl">
 <head>
-<meta charset="UTF-8">
-<title>System inspekcji paczek</title>
-<style>
-body { font-family: Arial; margin:0; padding:1rem; background:#f0f0f0; }
-.container { display:flex; gap:10px; }
-.camera-panel { flex:1; background:#fff; padding:10px; border-radius:8px; border:1px solid #ccc; text-align:center; }
-.latest-img { max-height:50vh; max-width:90%; border:4px solid #ccc; border-radius:8px; transition:border 0.2s; }
-.label-good { color:green; font-weight:bold; }
-.label-bad { color:red; font-weight:bold; }
-.img-border-good { border-color:green !important; }
-.img-border-bad { border-color:red !important; }
-.thumbs { display:flex; flex-wrap:wrap; justify-content:center; gap:10px; }
-.thumb { width:120px; cursor:pointer; border:1px solid #ccc; border-radius:6px; padding:4px; }
-.thumb img { width:100%; height:auto; object-fit:contain; max-height:100px; }
-</style>
+    <meta charset="UTF-8">
+    <title>System inspekcji paczek</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin:0; padding:1rem; background:#f0f0f0; }
+        .container { display:flex; justify-content: space-between; gap:10px; }
+
+        .camera-panel {
+            flex: 1;
+            background:#fff;
+            padding:10px;
+            border-radius:8px;
+            border:1px solid #ccc;
+            text-align:center;
+        }
+
+        .camera-panel h2 { margin-top:0; }
+
+        .latest-img { max-height: 50vh; max-width: 90%; border:4px solid #ccc; border-radius:8px; transition: border 0.2s; }
+
+        .thumbs { display:flex; justify-content:center; flex-wrap:wrap; margin-top:10px; gap:10px; }
+        .thumb { background:#fff; border:1px solid #ccc; border-radius:6px; padding:4px; width:120px; cursor:pointer; }
+        .thumb img { width:100%; height:auto; max-height:100px; object-fit:contain; }
+
+        /* Kolory dla kategorii i obramowania */
+        .label-good { color: green; font-weight: bold; }
+        .label-bad { color: red; font-weight: bold; }
+
+        .img-border-good { border-color: green !important; }
+        .img-border-bad { border-color: red !important; }
+
+        /* Modal */
+        .modal {
+            display:none; position:fixed; z-index:999; left:0; top:0;
+            width:100%; height:100%; background-color: rgba(0,0,0,0.85);
+            justify-content:center; align-items:center; flex-direction:column;
+        }
+        .modal-content { max-width:90%; max-height:90%; position:relative; }
+        .modal img { max-width:100%; max-height:80vh; border:3px solid #fff; border-radius:6px; }
+        .modal-meta { margin-top:10px; color:#fff; font-size:1.1rem; text-align:center; }
+
+        .modal-arrow { position:absolute; top:50%; transform:translateY(-50%); font-size:3rem; color:#fff; cursor:pointer; user-select:none; padding:0 10px; }
+        .modal-arrow.left { left:0; }
+        .modal-arrow.right { right:0; }
+
+        .modal-close { position:absolute; top:10px; right:15px; font-size:2rem; color:#fff; cursor:pointer; user-select:none; }
+    </style>
 </head>
 <body>
-<div class="container">
-    <div class="camera-panel" id="panel-X1">
-        <h2>Kamera X1</h2>
-        <label><input type="checkbox" id="sound-toggle-X1" checked> Sygnał dźwiękowy</label><br>
-        <img id="latest-X1" class="latest-img" src="" alt="Brak zdjęcia">
-        <div id="label-X1">—</div>
-        <h3>Ostatnie 10 wadliwych paczek</h3>
-        <div class="thumbs" id="thumbs-X1"></div>
+    <div class="container">
+        <div class="camera-panel" id="panel-X1">
+            <h2>Kamera X1</h2>
+            <label>
+                <input type="checkbox" id="sound-toggle-X1" checked>
+                Sygnał dźwiękowy
+            </label>
+            <br>
+            <img id="latest-X1" class="latest-img" src="" alt="Brak zdjęcia">
+            <div id="label-X1">—</div>
+            <h3>Ostatnie 10 wadliwych paczek</h3>
+            <div class="thumbs" id="thumbs-X1"></div>
+        </div>
+
+        <div class="camera-panel" id="panel-Y1">
+            <h2>Kamera Y1</h2>
+            <label>
+                <input type="checkbox" id="sound-toggle-Y1" checked>
+                Sygnał dźwiękowy
+            </label>
+            <br>
+            <img id="latest-Y1" class="latest-img" src="" alt="Brak zdjęcia">
+            <div id="label-Y1">—</div>
+            <h3>Ostatnie 10 wadliwych paczek</h3>
+            <div class="thumbs" id="thumbs-Y1"></div>
+        </div>
     </div>
-    <div class="camera-panel" id="panel-Y1">
-        <h2>Kamera Y1</h2>
-        <label><input type="checkbox" id="sound-toggle-Y1" checked> Sygnał dźwiękowy</label><br>
-        <img id="latest-Y1" class="latest-img" src="" alt="Brak zdjęcia">
-        <div id="label-Y1">—</div>
-        <h3>Ostatnie 10 wadliwych paczek</h3>
-        <div class="thumbs" id="thumbs-Y1"></div>
+
+    <!-- Modal -->
+    <div class="modal" id="image-modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeModal()">×</span>
+            <span class="modal-arrow left" onclick="prevImage()">❮</span>
+            <span class="modal-arrow right" onclick="nextImage()">❯</span>
+            <img id="modal-img" src="" alt="">
+            <div class="modal-meta" id="modal-meta"></div>
+        </div>
     </div>
-</div>
 
-<audio id="beep-sound" src="/static/beep.mp3" preload="auto"></audio>
+    <audio id="beep-sound" src="/static/beep.mp3" preload="auto"></audio>
 
-<script src="https://cdn.socket.io/4.5.1/socket.io.min.js"></script>
-<script>
-const socket = io();
-const lastBadTimestamps = { X1:0, Y1:0 };
-const soundToggles = {
-    X1:()=>document.getElementById('sound-toggle-X1').checked,
-    Y1:()=>document.getElementById('sound-toggle-Y1').checked
-};
-const badImages = { X1:[], Y1:[] };
+    <script>
+        const lastBadTimestamps = { X1: 0, Y1: 0 };
+        const soundToggles = {
+            X1: () => document.getElementById('sound-toggle-X1').checked,
+            Y1: () => document.getElementById('sound-toggle-Y1').checked
+        };
+        const beepAudio = document.getElementById("beep-sound");
 
-function renderThumbs(cam){
-    const thumbsEl=document.getElementById('thumbs-'+cam);
-    thumbsEl.innerHTML="";
-    badImages[cam].forEach((item,index)=>{
-        const box=document.createElement("div");
-        box.className="thumb";
-        box.onclick=()=>showModal(cam,index);
-        const img=document.createElement("img");
-        img.src=item.url+"?t="+item.timestamp;
-        img.alt=item.filename;
-        box.appendChild(img);
-        thumbsEl.appendChild(box);
-    });
-}
+        const camerasList = ['X1', 'Y1'];
+        let badImages = { X1: [], Y1: [] };
+        let currentCam = '';
+        let currentIndex = 0;
 
-function updateLatest(cam,item){
-    const latestImg=document.getElementById('latest-'+cam);
-    const label=document.getElementById('label-'+cam);
-    latestImg.src=item.url+"?t="+item.timestamp;
-    label.textContent=item.category;
-    label.classList.remove("label-good","label-bad");
-    latestImg.classList.remove("img-border-good","img-border-bad");
-    if(item.category.toLowerCase()==="good"){
-        label.classList.add("label-good");
-        latestImg.classList.add("img-border-good");
-    } else {
-        label.classList.add("label-bad");
-        latestImg.classList.add("img-border-bad");
-    }
-}
+        const modal = document.getElementById("image-modal");
+        const modalImg = document.getElementById("modal-img");
+        const modalMeta = document.getElementById("modal-meta");
 
-socket.on("new_image", function(item){
-    updateLatest(item.camera,item);
-    if(item.category.toLowerCase()!=="good"){
-        if(item.timestamp>lastBadTimestamps[item.camera]){
-            lastBadTimestamps[item.camera]=item.timestamp;
-            if(soundToggles[item.camera]()){
-                const beep=document.getElementById("beep-sound");
-                beep.currentTime=0;
-                beep.play().catch(()=>{});
+        function renderThumbs(cam) {
+            const thumbsEl = document.getElementById('thumbs-' + cam);
+            thumbsEl.innerHTML = "";
+            badImages[cam].forEach((item, index) => {
+                const box = document.createElement("div");
+                box.className = "thumb";
+                box.onclick = () => showModal(cam, index);
+                const img = document.createElement("img");
+                img.src = item.url + "?t=" + item.timestamp;
+                img.alt = item.filename;
+                box.appendChild(img);
+                thumbsEl.appendChild(box);
+            });
+        }
+
+        function showModal(cam, index) {
+            currentCam = cam;
+            currentIndex = index;
+            updateModal();
+            modal.style.display = "flex";
+        }
+
+        function updateModal() {
+            const list = badImages[currentCam];
+            if (!list || list.length === 0) return;
+            const item = list[currentIndex];
+            modalImg.src = item.url + "?t=" + item.timestamp;
+            modalMeta.textContent = `${currentCam}: ${item.category} — ${item.filename}`;
+        }
+
+        function closeModal() {
+            modal.style.display = "none";
+            if (document.fullscreenElement) document.exitFullscreen();
+        }
+
+        function prevImage() {
+            const list = badImages[currentCam];
+            if (!list) return;
+            currentIndex = (currentIndex - 1 + list.length) % list.length;
+            updateModal();
+        }
+
+        function nextImage() {
+            const list = badImages[currentCam];
+            if (!list) return;
+            currentIndex = (currentIndex + 1) % list.length;
+            updateModal();
+        }
+
+        window.addEventListener("keydown", e => {
+            if (e.key === "Escape") closeModal();
+            if (e.key === "ArrowLeft") prevImage();
+            if (e.key === "ArrowRight") nextImage();
+        });
+
+        modal.addEventListener("click", e => {
+            if (e.target === modal) closeModal();
+        });
+
+        async function updateCameras() {
+            for (const cam of camerasList) {
+                try {
+                    const res = await fetch(`/api/latest/${cam}`, {cache:"no-store"});
+                    const data = await res.json();
+
+                    const latestImg = document.getElementById('latest-' + cam);
+                    const label = document.getElementById('label-' + cam);
+
+                    if (data.latest) {
+                        latestImg.src = data.latest.url + "?t=" + data.latest.timestamp;
+                        label.textContent = data.latest.category;
+
+                        // usuń poprzednie klasy
+                        label.classList.remove("label-good", "label-bad");
+                        latestImg.classList.remove("img-border-good", "img-border-bad");
+
+                        // dodaj odpowiednie klasy kolorów
+                        if (data.latest.category.toLowerCase() === "good") {
+                            label.classList.add("label-good");
+                            latestImg.classList.add("img-border-good");
+                        } else {
+                            label.classList.add("label-bad");
+                            latestImg.classList.add("img-border-bad");
+                        }
+                    }
+
+                    const badList = data.bad_recent || [];
+
+                    // Sprawdź, czy pojawiło się nowsze złe zdjęcie
+                    if (badList.length > 0) {
+                        const latestBad = badList[0];
+                        if (latestBad.timestamp > lastBadTimestamps[cam]) {
+                            lastBadTimestamps[cam] = latestBad.timestamp;
+
+                            if (soundToggles[cam]()) {
+                                beepAudio.currentTime = 0;
+                                beepAudio.play().catch(e => {
+                                    // Dźwięk może nie działać bez interakcji użytkownika
+                                    console.warn("Nie można odtworzyć dźwięku:", e);
+                                });
+                            }
+                        }
+                    }
+
+                    badImages[cam] = badList;
+                    renderThumbs(cam);
+
+
+                } catch(e) {
+                    console.error("Błąd API:", e);
+                }
             }
         }
-        badImages[item.camera].unshift(item);
-        if(badImages[item.camera].length>10) badImages[item.camera].pop();
-        renderThumbs(item.camera);
-    }
-});
 
-// Modal obsługa (przykładowa)
-let currentCam="", currentIndex=0;
-const modal=document.createElement("div"); // możesz dodać swój modal tutaj
-function showModal(cam,index){currentCam=cam;currentIndex=index;}
-</script>
+        updateCameras();
+        setInterval(updateCameras, 2000);
+    </script>
 </body>
 </html>
