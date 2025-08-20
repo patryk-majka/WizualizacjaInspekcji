@@ -138,8 +138,8 @@
                         lastBadTimestamps[cam] = latest.timestamp;
                         if (soundToggles[cam]()) {
                             const audio = beepAudios[cam];
-                            beepAudio.currentTime = 0;
-                            beepAudio.play().catch(err => console.warn("Błąd odtwarzania dźwięku:", err));
+                            audio.currentTime = 0;
+                            audio.play().catch(err => console.warn("Błąd odtwarzania dźwięku:", err));
                         }
                     }
                 }
